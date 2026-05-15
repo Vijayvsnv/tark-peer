@@ -40,10 +40,10 @@ class ProfileService {
     if (user == null) return [];
     final resp = await _client
         .from('call_history')
-        .select()
+        .select('*, user_a_profile:profiles!user_a(id,name,avatar_url), user_b_profile:profiles!user_b(id,name,avatar_url)')
         .or('user_a.eq.${user.id},user_b.eq.${user.id}')
         .order('started_at', ascending: false)
-        .limit(50);
+        .limit(10);
     return List<Map<String, dynamic>>.from(resp);
   }
 }

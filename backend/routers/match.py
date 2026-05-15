@@ -100,6 +100,7 @@ async def do_match(user_id: str, ws: WebSocket):
         "agora_token": token_a,
         "agora_uid": uid_a,
         "agora_app_id": settings.agora_app_id,
+        "partner_id": matched_id,
         "partner": {
             "name": profile_b.get("name", "User"),
             "age": profile_b.get("age"),
@@ -116,6 +117,7 @@ async def do_match(user_id: str, ws: WebSocket):
             "agora_token": token_b,
             "agora_uid": uid_b,
             "agora_app_id": settings.agora_app_id,
+            "partner_id": user_id,
             "partner": {
                 "name": profile_a.get("name", "User"),
                 "age": profile_a.get("age"),

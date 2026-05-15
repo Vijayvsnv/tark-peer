@@ -12,6 +12,7 @@ import 'screens/profile/setup_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/matching/matching_screen.dart';
 import 'screens/call/call_screen.dart';
+import 'screens/profile/profile_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +34,7 @@ final _router = GoRouter(
     GoRoute(path: '/signup', builder: (_, __) => const SignupScreen()),
     GoRoute(path: '/setup', builder: (_, __) => const SetupScreen()),
     GoRoute(path: '/home', builder: (_, __) => const HomeScreen()),
+    GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
     GoRoute(path: '/matching', builder: (_, __) => const MatchingScreen()),
     GoRoute(
       path: '/call',

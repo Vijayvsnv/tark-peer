@@ -24,6 +24,7 @@ class MatchEvent {
   final String agoraToken;
   final int agoraUid;
   final String agoraAppId;
+  final String partnerId;
   final PartnerInfo partner;
 
   const MatchEvent({
@@ -31,6 +32,7 @@ class MatchEvent {
     required this.agoraToken,
     required this.agoraUid,
     required this.agoraAppId,
+    required this.partnerId,
     required this.partner,
   });
 
@@ -39,6 +41,7 @@ class MatchEvent {
         agoraToken: json['agora_token'] as String,
         agoraUid: json['agora_uid'] as int,
         agoraAppId: json['agora_app_id'] as String,
+        partnerId: json['partner_id'] as String? ?? '',
         partner: PartnerInfo.fromJson(json['partner'] as Map<String, dynamic>),
       );
 }

@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/theme.dart';
 import '../../models/match_event.dart';
 import '../../services/call_service.dart';
+import '../../services/friend_service.dart';
 import '../../services/match_service.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/user_avatar.dart';
@@ -21,12 +22,14 @@ class CallScreen extends StatefulWidget {
 class _CallScreenState extends State<CallScreen> {
   final _callService = CallService();
   final _matchService = MatchService();
+  final _friendService = FriendService();
   final _auth = AuthService();
   int _remaining = kCallDurationSeconds;
   Timer? _timer;
   StreamSubscription? _sub;
   bool _micEnabled = true;
   bool _joining = true;
+  String? _friendStatus;
 
   @override
   void initState() {
@@ -79,6 +82,26 @@ class _CallScreenState extends State<CallScreen> {
     });
 
     if (mounted) setState(() => _joining = false);
+    _loadFriendStatus();
+  }
+
+  Future<void> _loadFriendStatus() async {
+    if (widget.event.partnerId.isEmpty) return;
+    try {
+      final s = await _friendService.getFriendshipStatus(widget.event.partnerId);
+      if (mounted) setState(() => _friendStatus = s);
+    } catch (_) {}
+  }
+
+  Future<void> _addFriend() async {
+    if (widget.event.partnerId.isEmpty) return;
+    try {
+      await _friendService.sendRequest(widget.event.partnerId);
+      if (mounted) setState(() => _friendStatus = 'pending');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Friend request sent!'), backgroundColor: Colors.green),
+      );
+    } catch (_) {}
   }
 
   void _onWsEvent(Map<String, dynamic> msg) {
@@ -231,7 +254,25 @@ class _CallScreenState extends State<CallScreen> {
                         const SizedBox(width: 64),
                       ],
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 16),
+                    if (_friendStatus == null)
+                      TextButton.icon(
+                        onPressed: _addFriend,
+                        icon: const Icon(Icons.person_add, color: kPrimary, size: 18),
+                        label: const Text('Add Friend', style: TextStyle(color: kPrimary)),
+                      )
+                    else if (_friendStatus == 'pending')
+                      const Text('Request Sent', style: TextStyle(color: kTextSecondary, fontSize: 13))
+                    else if (_friendStatus == 'accepted')
+                      const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.people, color: Colors.green, size: 16),
+                          SizedBox(width: 4),
+                          Text('Friends', style: TextStyle(color: Colors.green, fontSize: 13)),
+                        ],
+                      ),
+                    const SizedBox(height: 16),
                   ],
                 ),
               ),

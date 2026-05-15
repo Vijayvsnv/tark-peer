@@ -13,6 +13,21 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+// Workaround: library plugins (e.g. app_links) reference flutter.compileSdkVersion
+// Only apply to non-app modules — the app module gets the real Flutter extension.
+subprojects {
+    if (project.name != "app") {
+        project.beforeEvaluate {
+            project.ext.set("flutter", [
+                compileSdkVersion: 35,
+                minSdkVersion    : 21,
+                targetSdkVersion : 35,
+                ndkVersion       : "25.1.8937393"
+            ])
+        }
+    }
+}
+
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }

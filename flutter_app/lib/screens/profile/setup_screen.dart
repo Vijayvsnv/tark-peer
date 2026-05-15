@@ -19,6 +19,32 @@ class _SetupScreenState extends State<SetupScreen> {
   final _profileService = ProfileService();
   String? _gender;
   bool _loading = false;
+  bool _initialLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExisting();
+  }
+
+  Future<void> _loadExisting() async {
+    try {
+      final p = await _profileService.getMyProfile();
+      if (p != null && mounted) {
+        _nameCtrl.text = p.name;
+        if (p.age != null) _ageCtrl.text = '${p.age}';
+        if (p.bio != null) _bioCtrl.text = p.bio!;
+        setState(() {
+          _gender = p.gender;
+          _initialLoading = false;
+        });
+      } else {
+        if (mounted) setState(() => _initialLoading = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _initialLoading = false);
+    }
+  }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -50,6 +76,12 @@ class _SetupScreenState extends State<SetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_initialLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF0F0A1E),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFF7C3AED))),
+      );
+    }
     return Scaffold(
       backgroundColor: kBackground,
       appBar: AppBar(title: const Text('Setup Profile')),

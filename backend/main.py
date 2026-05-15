@@ -3,7 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from services import redis_client
+from services.supabase_client import supabase_admin
 from routers import auth, profile, call, match
+from routers.match import active_connections
 
 
 @asynccontextmanager
@@ -32,3 +34,18 @@ app.include_router(match.router)
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "tark-peer"}
+
+
+@app.get("/stats")
+async def get_stats():
+    try:
+        resp = supabase_admin.table("profiles").select("id", count="exact").execute()
+        total = resp.count or 0
+    except Exception:
+        total = 0
+    online = len(active_connections)
+    return {
+        "total_users": total,
+        "online": online,
+        "offline": max(0, total - online),
+    }
