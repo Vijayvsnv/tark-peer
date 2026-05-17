@@ -1,9 +1,5 @@
-import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
-import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../models/user_profile.dart';
 import '../../services/auth_service.dart';
@@ -25,10 +21,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   UserProfile? _profile;
   int _currentTab = 1;
   int _pendingCount = 0;
-  Map<String, dynamic> _stats = {'total_users': 0, 'online': 0, 'offline': 0};
   late AnimationController _pulseCtrl;
   late Animation<double> _pulse;
-  Timer? _statsTimer;
 
   @override
   void initState() {
@@ -39,26 +33,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
     _loadAll();
-    _statsTimer = Timer.periodic(const Duration(seconds: 30), (_) => _loadStats());
   }
 
   Future<void> _loadAll() async {
-    await Future.wait([_loadProfile(), _loadStats(), _loadPendingCount()]);
+    await Future.wait([_loadProfile(), _loadPendingCount()]);
   }
 
   Future<void> _loadProfile() async {
     try {
       final p = await _profileService.getMyProfile();
       if (mounted) setState(() => _profile = p);
-    } catch (_) {}
-  }
-
-  Future<void> _loadStats() async {
-    try {
-      final resp = await http.get(Uri.parse('$kBackendUrl/stats'));
-      if (resp.statusCode == 200 && mounted) {
-        setState(() => _stats = jsonDecode(resp.body) as Map<String, dynamic>);
-      }
     } catch (_) {}
   }
 
@@ -72,7 +56,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   void dispose() {
     _pulseCtrl.dispose();
-    _statsTimer?.cancel();
     super.dispose();
   }
 
@@ -190,8 +173,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               'Connect with real people and practice',
               style: TextStyle(color: kTextSecondary, fontSize: 14),
             ),
-            const SizedBox(height: 20),
-            _buildStatsCard(),
             const SizedBox(height: 48),
             AnimatedBuilder(
               animation: _pulse,
@@ -209,43 +190,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ),
     );
   }
-
-  Widget _buildStatsCard() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-      decoration: BoxDecoration(
-        color: kSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kPrimary.withOpacity(0.2)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _statItem('Total Users', '${_stats['total_users']}', kTextPrimary),
-          _divider(),
-          _statItem('Online', '${_stats['online']}', Colors.greenAccent),
-          _divider(),
-          _statItem('Offline', '${_stats['offline']}', kTextSecondary),
-        ],
-      ),
-    );
-  }
-
-  Widget _statItem(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(value, style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 2),
-        Text(label, style: const TextStyle(color: kTextSecondary, fontSize: 11)),
-      ],
-    );
-  }
-
-  Widget _divider() => Container(
-        width: 1,
-        height: 36,
-        color: kTextSecondary.withOpacity(0.2),
-      );
 
   Widget _buildComingSoon(String title, IconData icon) {
     return Center(
