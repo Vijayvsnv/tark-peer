@@ -128,116 +128,131 @@ async def call_timer_task(room_id: str, user_a: str, user_b: str):
 # ── Matching logic ────────────────────────────────────────────────────────────
 
 async def do_match(user_id: str, ws: WebSocket):
-    matched_id = await redis_client.find_match(user_id)
+    # Track matched_id outside the try so the CancelledError handler can
+    # re-queue the partner if we were cancelled mid-flight after popping them.
+    matched_id: str | None = None
+    try:
+        matched_id = await redis_client.find_match(user_id)
 
-    if not matched_id:
-        # Timeout with no partner found; tell client to keep waiting
-        if user_id in active_connections:
+        if not matched_id:
+            # Timeout with no partner found; tell client to keep waiting
+            if user_id in active_connections:
+                await send_json(ws, {"type": "waiting"})
+            return
+
+        # Verify the initiating user is still connected
+        if user_id not in active_connections:
+            await redis_client.add_to_queue(matched_id)
+            return
+
+        # Verify the matched user is still connected (they may have disconnected
+        # while sitting in the brpop queue)
+        if matched_id not in active_connections:
+            # Re-queue ourselves and signal that we're still waiting
+            await redis_client.add_to_queue(user_id)
             await send_json(ws, {"type": "waiting"})
-        return
+            return
 
-    # Verify the initiating user is still connected
-    if user_id not in active_connections:
-        await redis_client.add_to_queue(matched_id)
-        return
+        channel_name = str(uuid4())
 
-    # Verify the matched user is still connected (they may have disconnected
-    # while sitting in the brpop queue)
-    if matched_id not in active_connections:
-        # Re-queue ourselves and signal that we're still waiting
-        await redis_client.add_to_queue(user_id)
-        await send_json(ws, {"type": "waiting"})
-        return
-
-    channel_name = str(uuid4())
-
-    token_a, uid_a = generate_token(
-        channel_name, user_id, settings.agora_app_id, settings.agora_app_certificate
-    )
-    token_b, uid_b = generate_token(
-        channel_name, matched_id, settings.agora_app_id, settings.agora_app_certificate
-    )
-
-    try:
-        profile_a = (
-            supabase_admin.table("profiles")
-            .select("name,age,gender,avatar_url")
-            .eq("id", user_id)
-            .single()
-            .execute()
-            .data
+        token_a, uid_a = generate_token(
+            channel_name, user_id, settings.agora_app_id, settings.agora_app_certificate
         )
-        profile_b = (
-            supabase_admin.table("profiles")
-            .select("name,age,gender,avatar_url")
-            .eq("id", matched_id)
-            .single()
-            .execute()
-            .data
+        token_b, uid_b = generate_token(
+            channel_name, matched_id, settings.agora_app_id, settings.agora_app_certificate
         )
-    except Exception:
-        profile_a = {"name": "User"}
-        profile_b = {"name": "User"}
 
-    # Store room state before notifying clients
-    await redis_client.set_user_room(user_id, channel_name)
-    await redis_client.set_user_room(matched_id, channel_name)
-    await redis_client.set_partner(channel_name, user_id, matched_id)
+        try:
+            profile_a = (
+                supabase_admin.table("profiles")
+                .select("name,age,gender,avatar_url")
+                .eq("id", user_id)
+                .single()
+                .execute()
+                .data
+            )
+            profile_b = (
+                supabase_admin.table("profiles")
+                .select("name,age,gender,avatar_url")
+                .eq("id", matched_id)
+                .single()
+                .execute()
+                .data
+            )
+        except Exception:
+            profile_a = {"name": "User"}
+            profile_b = {"name": "User"}
 
-    now = datetime.now(timezone.utc)
-    try:
-        supabase_admin.table("call_history").insert(
-            {
-                "user_a": user_id,
-                "user_b": matched_id,
-                "room_id": channel_name,
-                "started_at": now.isoformat(),
-            }
-        ).execute()
-    except Exception:
-        pass
+        # Store room state before notifying clients
+        await redis_client.set_user_room(user_id, channel_name)
+        await redis_client.set_user_room(matched_id, channel_name)
+        await redis_client.set_partner(channel_name, user_id, matched_id)
 
-    # Notify both users
-    await send_json(
-        ws,
-        {
-            "type": "matched",
-            "channel_name": channel_name,
-            "agora_token": token_a,
-            "agora_uid": uid_a,
-            "agora_app_id": settings.agora_app_id,
-            "partner_id": matched_id,
-            "partner": {
-                "name": profile_b.get("name", "User"),
-                "age": profile_b.get("age"),
-                "gender": profile_b.get("gender"),
-                "avatar_url": profile_b.get("avatar_url"),
-            },
-        },
-    )
+        now = datetime.now(timezone.utc)
+        try:
+            supabase_admin.table("call_history").insert(
+                {
+                    "user_a": user_id,
+                    "user_b": matched_id,
+                    "room_id": channel_name,
+                    "started_at": now.isoformat(),
+                }
+            ).execute()
+        except Exception:
+            pass
 
-    partner_ws = active_connections.get(matched_id)
-    if partner_ws:
+        # Notify both users
         await send_json(
-            partner_ws,
+            ws,
             {
                 "type": "matched",
                 "channel_name": channel_name,
-                "agora_token": token_b,
-                "agora_uid": uid_b,
+                "agora_token": token_a,
+                "agora_uid": uid_a,
                 "agora_app_id": settings.agora_app_id,
-                "partner_id": user_id,
+                "partner_id": matched_id,
                 "partner": {
-                    "name": profile_a.get("name", "User"),
-                    "age": profile_a.get("age"),
-                    "gender": profile_a.get("gender"),
-                    "avatar_url": profile_a.get("avatar_url"),
+                    "name": profile_b.get("name", "User"),
+                    "age": profile_b.get("age"),
+                    "gender": profile_b.get("gender"),
+                    "avatar_url": profile_b.get("avatar_url"),
                 },
             },
         )
 
-    timer = asyncio.create_task(call_timer_task(channel_name, user_id, matched_id))
-    call_timers[channel_name] = timer
+        partner_ws = active_connections.get(matched_id)
+        if partner_ws:
+            await send_json(
+                partner_ws,
+                {
+                    "type": "matched",
+                    "channel_name": channel_name,
+                    "agora_token": token_b,
+                    "agora_uid": uid_b,
+                    "agora_app_id": settings.agora_app_id,
+                    "partner_id": user_id,
+                    "partner": {
+                        "name": profile_a.get("name", "User"),
+                        "age": profile_a.get("age"),
+                        "gender": profile_a.get("gender"),
+                        "avatar_url": profile_a.get("avatar_url"),
+                    },
+                },
+            )
+
+        timer = asyncio.create_task(call_timer_task(channel_name, user_id, matched_id))
+        call_timers[channel_name] = timer
+
+    except asyncio.CancelledError:
+        # do_match was cancelled (user disconnected or hit Cancel) after we
+        # already popped a partner from the queue.  Put them back so they
+        # aren't stranded waiting for a match that will never arrive.
+        if matched_id and matched_id in active_connections:
+            try:
+                await redis_client.add_to_queue(matched_id)
+            except Exception:
+                pass
+        raise
 
 
 # ── WebSocket endpoint ────────────────────────────────────────────────────────
