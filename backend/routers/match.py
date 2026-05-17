@@ -1,282 +1,199 @@
+"""
+Stateless matchmaker.
+
+Design — what changed vs. the old WebSocket-only matcher:
+
+  * No active_connections dict.  No call_timers dict.  All cross-user signalling
+    is broadcast through Supabase Realtime, so it works the same whether we
+    have one FastAPI pod or fifty.
+
+  * /ws/match is now ONLY for "I am waiting to be matched" presence.  It owns
+    the queue entry and nothing else.  As soon as a partner is found we send
+    one "matched" frame, the server closes the socket, and the client moves
+    onto the call screen.  Any later signalling (call_ended, etc.) flows over
+    Supabase Realtime so disconnecting this WS never tears the room down.
+
+  * No "matching task races a disconnect cleanup" problem — disconnect cleanup
+    here does exactly one thing: remove this user_id from the waiting queue.
+
+Match notification path:
+
+  1. Client subscribes to Realtime channel  user:{user_id}  BEFORE opening WS.
+  2. Client opens WS to /ws/match.
+  3. Backend loops calling find_partner (atomic Lua pop on Redis sorted set).
+  4. When find_partner returns a partner, backend builds the room state,
+     broadcasts the "matched" event to  user:{me}  AND  user:{partner}  via
+     Supabase Realtime, AND sends the same event over our open WS as a
+     low-latency fast-path for the matcher caller.
+  5. Backend closes WS server-side.  Client navigates to /call.
+"""
+
 import asyncio
 import json
-from uuid import uuid4
+import logging
 from datetime import datetime, timezone
+from typing import Optional
+from uuid import uuid4
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
-from services.supabase_client import supabase_admin
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+
+from core.config import settings
 from services import redis_client
 from services.agora_service import generate_token
-from core.config import settings
+from services.supabase_client import supabase_admin
+from services.supabase_realtime import broadcast
 
 router = APIRouter(tags=["match"])
-
-# user_id -> WebSocket (only live connections)
-active_connections: dict[str, WebSocket] = {}
-# room_id -> asyncio.Task
-call_timers: dict[str, asyncio.Task] = {}
-
-CALL_DURATION = 1800  # 30 minutes
+logger = logging.getLogger(__name__)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-async def send_json(ws: WebSocket, data: dict):
+async def _authenticate(token: str) -> Optional[str]:
+    """Return user_id if token is a valid Supabase JWT, else None."""
     try:
-        await ws.send_text(json.dumps(data))
+        resp = supabase_admin.auth.get_user(token)
+        if not resp or not resp.user:
+            return None
+        return str(resp.user.id)
     except Exception:
-        pass
+        return None
 
 
-async def notify_user(user_id: str, data: dict):
-    ws = active_connections.get(user_id)
-    if ws:
-        await send_json(ws, data)
-
-
-async def _close_ws(ws: WebSocket):
-    try:
-        await ws.close(1000)
-    except Exception:
-        pass
-
-
-async def _full_room_cleanup(
-    room_id: str,
-    user_id: str,
-    ended_by: str,
-    notify_partner_reason: str,
-):
-    """
-    Centralised cleanup for a room.  Safe to call even if some keys are
-    already gone (all Redis ops are idempotent).
-    """
-    partner_id = await redis_client.get_partner(room_id, user_id)
-
-    # Cancel the 30-min timer if still running
-    timer = call_timers.pop(room_id, None)
-    if timer:
-        timer.cancel()
-
-    # Persist end time + duration in call_history
-    now = datetime.now(timezone.utc)
-    duration_seconds = None
+async def _fetch_profile(user_id: str) -> dict:
     try:
         row = (
-            supabase_admin.table("call_history")
-            .select("started_at")
-            .eq("room_id", room_id)
-            .maybe_single()
+            supabase_admin.table("profiles")
+            .select("name,age,gender,avatar_url")
+            .eq("id", user_id)
+            .single()
             .execute()
+            .data
         )
-        if row.data and row.data.get("started_at"):
-            started = datetime.fromisoformat(
-                row.data["started_at"].replace("Z", "+00:00")
-            )
-            duration_seconds = max(0, int((now - started).total_seconds()))
+        return row or {"name": "User"}
     except Exception:
-        pass
-
-    update: dict = {"ended_at": now.isoformat(), "ended_by": ended_by}
-    if duration_seconds is not None:
-        update["duration_seconds"] = duration_seconds
-
-    try:
-        supabase_admin.table("call_history").update(update).eq(
-            "room_id", room_id
-        ).is_("ended_at", "null").execute()
-    except Exception:
-        pass
-
-    # Remove Redis state for both users
-    await redis_client.delete_user_room(user_id)
-    if partner_id:
-        await redis_client.delete_user_room(partner_id)
-        await redis_client.delete_room_partners(room_id, user_id, partner_id)
-        await notify_user(partner_id, {"type": "call_ended", "reason": notify_partner_reason})
-    else:
-        # Partner key already gone — still clean up our side
-        await redis_client.delete_room_partners(room_id, user_id, user_id)
+        return {"name": "User"}
 
 
-# ── Call-timer task (fires when 30 min elapses) ──────────────────────────────
+def _build_match_payload(channel_name: str, my_token: str, my_uid: int,
+                         partner_id: str, partner_profile: dict) -> dict:
+    return {
+        "channel_name": channel_name,
+        "agora_token": my_token,
+        "agora_uid": my_uid,
+        "agora_app_id": settings.agora_app_id,
+        "partner_id": partner_id,
+        "partner": {
+            "name": partner_profile.get("name", "User"),
+            "age": partner_profile.get("age"),
+            "gender": partner_profile.get("gender"),
+            "avatar_url": partner_profile.get("avatar_url"),
+        },
+    }
 
-async def call_timer_task(room_id: str, user_a: str, user_b: str):
-    await asyncio.sleep(CALL_DURATION)
+
+async def _create_match(user_a: str, user_b: str) -> tuple[dict, dict]:
+    """
+    Build all state for a fresh call: tokens, Redis room state, call_history
+    row, active_rooms timer entry.  Returns the per-side match payloads.
+
+    Idempotent on the Supabase insert (try/except wrapped) and on Redis (TTLs
+    overwrite cleanly), so a partial failure does not poison the room.
+    """
+    channel_name = str(uuid4())
     now = datetime.now(timezone.utc)
+    started_at_unix = now.timestamp()
+    end_time_unix = started_at_unix + redis_client.CALL_DURATION
 
+    token_a, uid_a = generate_token(
+        channel_name, user_a, settings.agora_app_id, settings.agora_app_certificate
+    )
+    token_b, uid_b = generate_token(
+        channel_name, user_b, settings.agora_app_id, settings.agora_app_certificate
+    )
+
+    profile_a, profile_b = await asyncio.gather(
+        _fetch_profile(user_a), _fetch_profile(user_b)
+    )
+
+    # Redis state — partner mapping + per-user room pointer + timer registration.
+    await redis_client.set_user_room(user_a, channel_name)
+    await redis_client.set_user_room(user_b, channel_name)
+    await redis_client.set_room_partners(channel_name, user_a, user_b)
+    await redis_client.register_active_room(
+        channel_name, user_a, user_b, started_at_unix, end_time_unix
+    )
+
+    # Best-effort call_history insert; failure here must not block matching.
     try:
-        supabase_admin.table("call_history").update(
+        supabase_admin.table("call_history").insert(
             {
-                "ended_at": now.isoformat(),
-                "duration_seconds": CALL_DURATION,
-                "ended_by": "timer",
+                "user_a": user_a,
+                "user_b": user_b,
+                "room_id": channel_name,
+                "started_at": now.isoformat(),
             }
-        ).eq("room_id", room_id).is_("ended_at", "null").execute()
-    except Exception:
-        pass
+        ).execute()
+    except Exception as e:
+        logger.warning("call_history insert failed: %r", e)
 
-    await notify_user(user_a, {"type": "call_ended", "reason": "timer"})
-    await notify_user(user_b, {"type": "call_ended", "reason": "timer"})
-
-    await redis_client.delete_user_room(user_a)
-    await redis_client.delete_user_room(user_b)
-    await redis_client.delete_room_partners(room_id, user_a, user_b)
-    call_timers.pop(room_id, None)
+    payload_a = _build_match_payload(channel_name, token_a, uid_a, user_b, profile_b)
+    payload_b = _build_match_payload(channel_name, token_b, uid_b, user_a, profile_a)
+    return payload_a, payload_b
 
 
-# ── Matching logic ────────────────────────────────────────────────────────────
-
-async def do_match(user_id: str, ws: WebSocket):
-    # Track matched_id outside the try so the CancelledError handler can
-    # re-queue the partner if we were cancelled mid-flight after popping them.
-    matched_id: str | None = None
+async def _send_ws(ws: WebSocket, data: dict) -> bool:
     try:
-        matched_id = await redis_client.find_match(user_id)
-
-        if not matched_id:
-            # Timeout with no partner found; tell client to keep waiting
-            if user_id in active_connections:
-                await send_json(ws, {"type": "waiting"})
-            return
-
-        # Verify the initiating user is still connected
-        if user_id not in active_connections:
-            await redis_client.add_to_queue(matched_id)
-            return
-
-        # Verify the matched user is still connected (they may have disconnected
-        # while sitting in the brpop queue)
-        if matched_id not in active_connections:
-            # Re-queue ourselves and signal that we're still waiting
-            await redis_client.add_to_queue(user_id)
-            await send_json(ws, {"type": "waiting"})
-            return
-
-        channel_name = str(uuid4())
-
-        token_a, uid_a = generate_token(
-            channel_name, user_id, settings.agora_app_id, settings.agora_app_certificate
-        )
-        token_b, uid_b = generate_token(
-            channel_name, matched_id, settings.agora_app_id, settings.agora_app_certificate
-        )
-
-        try:
-            profile_a = (
-                supabase_admin.table("profiles")
-                .select("name,age,gender,avatar_url")
-                .eq("id", user_id)
-                .single()
-                .execute()
-                .data
-            )
-            profile_b = (
-                supabase_admin.table("profiles")
-                .select("name,age,gender,avatar_url")
-                .eq("id", matched_id)
-                .single()
-                .execute()
-                .data
-            )
-        except Exception:
-            profile_a = {"name": "User"}
-            profile_b = {"name": "User"}
-
-        # Store room state before notifying clients
-        await redis_client.set_user_room(user_id, channel_name)
-        await redis_client.set_user_room(matched_id, channel_name)
-        await redis_client.set_partner(channel_name, user_id, matched_id)
-
-        now = datetime.now(timezone.utc)
-        try:
-            supabase_admin.table("call_history").insert(
-                {
-                    "user_a": user_id,
-                    "user_b": matched_id,
-                    "room_id": channel_name,
-                    "started_at": now.isoformat(),
-                }
-            ).execute()
-        except Exception:
-            pass
-
-        # Notify both users
-        await send_json(
-            ws,
-            {
-                "type": "matched",
-                "channel_name": channel_name,
-                "agora_token": token_a,
-                "agora_uid": uid_a,
-                "agora_app_id": settings.agora_app_id,
-                "partner_id": matched_id,
-                "partner": {
-                    "name": profile_b.get("name", "User"),
-                    "age": profile_b.get("age"),
-                    "gender": profile_b.get("gender"),
-                    "avatar_url": profile_b.get("avatar_url"),
-                },
-            },
-        )
-
-        partner_ws = active_connections.get(matched_id)
-        if partner_ws:
-            await send_json(
-                partner_ws,
-                {
-                    "type": "matched",
-                    "channel_name": channel_name,
-                    "agora_token": token_b,
-                    "agora_uid": uid_b,
-                    "agora_app_id": settings.agora_app_id,
-                    "partner_id": user_id,
-                    "partner": {
-                        "name": profile_a.get("name", "User"),
-                        "age": profile_a.get("age"),
-                        "gender": profile_a.get("gender"),
-                        "avatar_url": profile_a.get("avatar_url"),
-                    },
-                },
-            )
-
-        timer = asyncio.create_task(call_timer_task(channel_name, user_id, matched_id))
-        call_timers[channel_name] = timer
-
-    except asyncio.CancelledError:
-        # do_match was cancelled (user disconnected or hit Cancel) after we
-        # already popped a partner from the queue.  Put them back so they
-        # aren't stranded waiting for a match that will never arrive.
-        if matched_id and matched_id in active_connections:
-            try:
-                await redis_client.add_to_queue(matched_id)
-            except Exception:
-                pass
-        raise
+        await ws.send_text(json.dumps(data))
+        return True
+    except Exception:
+        return False
 
 
-# ── WebSocket endpoint ────────────────────────────────────────────────────────
+# ── WebSocket: queue presence + cancel ───────────────────────────────────────
+
+# Per-process queue-poll interval.  Lower = lower match latency, more Redis
+# QPS.  Each user runs a single loop, so total QPS = active_waiters / interval.
+_MATCH_POLL_INTERVAL_S = 1.0
+
 
 @router.websocket("/ws/match")
 async def websocket_match(websocket: WebSocket, token: str = Query(...)):
-    # Authenticate before accepting
-    try:
-        response = supabase_admin.auth.get_user(token)
-        if not response or not response.user:
-            await websocket.close(code=4001)
-            return
-    except Exception:
+    """
+    Hold a user in the waiting queue and try to pair them on a 1-second tick.
+
+    The WebSocket is short-lived: it lives only until either (a) a partner is
+    found, or (b) the client closes / cancels.  The backend keeps NO state
+    about the resulting call inside this handler — that's all in Redis and
+    delivered via Supabase Realtime.
+    """
+    user_id = await _authenticate(token)
+    if not user_id:
+        # 4001 = application-level "unauthorized" close code.
         await websocket.close(code=4001)
         return
 
-    user_id = str(response.user.id)
     await websocket.accept()
-    active_connections[user_id] = websocket
 
-    await send_json(websocket, {"type": "waiting"})
-    await redis_client.add_to_queue(user_id)  # lrem+lpush pipeline; deduped
+    # Defensive: if this user already has a live room (e.g. they opened the
+    # app fresh while still in a call), don't re-queue them; tell the client
+    # to bounce to /call.
+    existing_room = await redis_client.get_user_room(user_id)
+    if existing_room:
+        await _send_ws(websocket, {
+            "type": "already_in_call",
+            "channel_name": existing_room,
+        })
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+        return
 
-    match_task = asyncio.create_task(do_match(user_id, websocket))
+    await redis_client.add_to_queue(user_id)
+    await _send_ws(websocket, {"type": "waiting"})
+
+    matcher = asyncio.create_task(_matcher_loop(user_id, websocket))
 
     try:
         while True:
@@ -286,51 +203,61 @@ async def websocket_match(websocket: WebSocket, token: str = Query(...)):
             except Exception:
                 continue
 
-            msg_type = msg.get("type")
-
-            # ── cancel: user tapped Cancel while waiting ──────────────────────
-            if msg_type == "cancel":
-                match_task.cancel()
-                await redis_client.remove_from_queue(user_id)
-                await send_json(websocket, {"type": "call_ended", "reason": "manual"})
-                await _close_ws(websocket)
+            mtype = msg.get("type")
+            if mtype == "cancel":
                 break
-
-            # ── end_call: user tapped End Call during a live call ─────────────
-            elif msg_type == "end_call":
-                room_id = await redis_client.get_user_room(user_id)
-                if room_id:
-                    await _full_room_cleanup(
-                        room_id=room_id,
-                        user_id=user_id,
-                        ended_by="user",
-                        notify_partner_reason="partner_left",
-                    )
-                await send_json(websocket, {"type": "call_ended", "reason": "manual"})
-                await _close_ws(websocket)
-                break
-
-            # ── ping: keep-alive ───────────────────────────────────────────────
-            elif msg_type == "ping":
-                await send_json(websocket, {"type": "pong"})
-
+            elif mtype == "ping":
+                await _send_ws(websocket, {"type": "pong"})
+            # All other client→server signalling now goes over HTTP / Realtime.
     except WebSocketDisconnect:
         pass
-
     finally:
-        # Cancel any in-flight matching attempt
-        match_task.cancel()
-        active_connections.pop(user_id, None)
+        matcher.cancel()
+        # The only cleanup we ever do here: drop the user from the queue.
+        # Room state (if any) is owned by /call/end and the expiry scanner.
+        await redis_client.remove_from_queue(user_id)
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
-        room_id = await redis_client.get_user_room(user_id)
-        if room_id:
-            # User disconnected during an active call
-            await _full_room_cleanup(
-                room_id=room_id,
-                user_id=user_id,
-                ended_by="disconnect",
-                notify_partner_reason="partner_left",
+
+async def _matcher_loop(user_id: str, websocket: WebSocket):
+    """
+    Background task per WS connection.  Polls Redis on a fixed cadence trying
+    to claim a partner.  When successful, broadcasts the match via Realtime,
+    pushes the same payload to our own WS as a fast-path, and exits.
+    """
+    try:
+        while True:
+            partner_id = await redis_client.find_partner(user_id)
+            if not partner_id:
+                await asyncio.sleep(_MATCH_POLL_INTERVAL_S)
+                continue
+
+            try:
+                payload_me, payload_partner = await _create_match(user_id, partner_id)
+            except Exception as e:
+                # Anything went wrong building the match — return both users to
+                # the queue and retry next tick.
+                logger.exception("create_match failed: %r", e)
+                await redis_client.add_to_queue(user_id)
+                await redis_client.add_to_queue(partner_id)
+                await asyncio.sleep(_MATCH_POLL_INTERVAL_S)
+                continue
+
+            # Notify both sides via Supabase Realtime (cross-instance safe).
+            await asyncio.gather(
+                broadcast(f"user:{user_id}", "matched", payload_me),
+                broadcast(f"user:{partner_id}", "matched", payload_partner),
             )
-        else:
-            # User disconnected while still waiting in queue (or after clean break)
-            await redis_client.remove_from_queue(user_id)
+
+            # Fast-path: also push to our own WS so the calling client never
+            # has to wait for the Realtime round-trip.
+            await _send_ws(websocket, {"type": "matched", **payload_me})
+            return
+
+    except asyncio.CancelledError:
+        # Caller cancelled — nothing else to do.  Queue removal happens in
+        # the WS handler's finally block.
+        raise

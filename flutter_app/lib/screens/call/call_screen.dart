@@ -1,15 +1,19 @@
 import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../models/match_event.dart';
 import '../../services/auth_service.dart';
 import '../../services/call_service.dart';
 import '../../services/friend_service.dart';
-import '../../services/match_service.dart';
 import '../../widgets/user_avatar.dart';
 
 // Agora AudioRoute int constants
@@ -28,13 +32,12 @@ class CallScreen extends StatefulWidget {
 
 class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   final _callService = CallService();
-  final _matchService = MatchService();
   final _friendService = FriendService();
   final _auth = AuthService();
 
   int _remaining = kCallDurationSeconds;
   Timer? _timer;
-  StreamSubscription? _sub;
+  RealtimeChannel? _roomChannel;
 
   bool _micEnabled = true;
   bool _speakerEnabled = false;
@@ -136,14 +139,18 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       }
     }
 
-    // WebSocket for signalling (call_ended events)
-    final token = _auth.accessToken;
-    if (token != null) {
-      try {
-        await _matchService.connect(token);
-        _sub = _matchService.events.listen(_onWsEvent);
-      } catch (_) {}
-    }
+    // Subscribe to room:{channelName} via Supabase Realtime for call_ended events.
+    // This works across backend instances — no WS needed here.
+    _roomChannel = Supabase.instance.client
+        .channel('room:${widget.event.channelName}')
+      ..onBroadcast(
+        event: 'call_ended',
+        callback: (payload) {
+          final reason = (payload['reason'] as String?) ?? 'ended';
+          _endCall(reason: reason);
+        },
+      )
+      ..subscribe();
 
     // Countdown timer
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -183,11 +190,6 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     } catch (_) {}
   }
 
-  void _onWsEvent(Map<String, dynamic> msg) {
-    if (!mounted) return;
-    if (msg['type'] == 'call_ended') _endCall(reason: msg['reason'] as String? ?? 'ended');
-  }
-
   Future<void> _confirmEndCall() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -222,12 +224,41 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     if (confirm == true) _endCall(reason: 'manual');
   }
 
+  bool _ended = false;
+
   Future<void> _endCall({String reason = 'manual'}) async {
+    if (_ended) return;
+    _ended = true;
     _timer?.cancel();
-    _sub?.cancel();
-    _matchService.sendEndCall();
+
+    // Unsubscribe Realtime room channel first so we don't re-enter on our own broadcast.
+    final ch = _roomChannel;
+    _roomChannel = null;
+    if (ch != null) {
+      try {
+        await Supabase.instance.client.removeChannel(ch);
+      } catch (_) {}
+    }
+
+    // Tell the backend to close the call and notify the partner.
+    final token = _auth.accessToken;
+    if (token != null) {
+      try {
+        await http.post(
+          Uri.parse('$kBackendUrl/call/end'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'channel_name': widget.event.channelName,
+            'reason': reason,
+          }),
+        );
+      } catch (_) {}
+    }
+
     await _callService.leaveCall();
-    await _matchService.disconnect();
     if (mounted) context.go('/home');
   }
 
@@ -278,11 +309,14 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   @override
   void dispose() {
     _timer?.cancel();
-    _sub?.cancel();
+    final ch = _roomChannel;
+    _roomChannel = null;
+    if (ch != null) {
+      Supabase.instance.client.removeChannel(ch).ignore();
+    }
     _pulseCtrl.dispose();
     _fadeCtrl.dispose();
     _callService.leaveCall();
-    _matchService.dispose();
     super.dispose();
   }
 

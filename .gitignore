@@ -1,20 +1,43 @@
-# Environment files
+# Environment / secrets — never commit
 backend/.env
 flutter_app/.env
+**/.env
+**/.env.local
+**/.env.*.local
 
 # Python
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
 .venv/
 venv/
+.Python
+*.egg-info/
+dist/
+.pytest_cache/
 
-# Flutter
+# Flutter / Dart
 flutter_app/.dart_tool/
 flutter_app/.flutter-plugins
 flutter_app/.flutter-plugins-dependencies
 flutter_app/build/
 flutter_app/*.iml
+flutter_app/.pub-cache/
+flutter_app/.pub/
+
+# Android build artifacts
+flutter_app/android/app/debug/
+flutter_app/android/app/profile/
+flutter_app/android/app/release/
+flutter_app/android/.gradle/
+flutter_app/android/local.properties
+
+# iOS build artifacts
+flutter_app/ios/Pods/
+flutter_app/ios/.symlinks/
+flutter_app/ios/Flutter/Flutter.framework/
+flutter_app/ios/Flutter/Flutter.podspec/
 
 # Docker
 *.log
@@ -23,3 +46,14 @@ flutter_app/*.iml
 .idea/
 .vscode/
 *.swp
+*.swo
+*.orig
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Claude Code
+.claude/settings.local.json
+backend/*.txt
