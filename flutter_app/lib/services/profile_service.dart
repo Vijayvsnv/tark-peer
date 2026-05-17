@@ -62,27 +62,23 @@ class ProfileService {
     if (partnerIds.isNotEmpty) {
       final profiles = await _client
           .from('profiles')
-          .select('id,name,age,gender,avatar_url')
+          .select('id,name,age,gender,avatar_url,bio')
           .inFilter('id', partnerIds.toList());
       for (final p in List<Map<String, dynamic>>.from(profiles)) {
         profileMap[p['id'] as String] = p;
       }
     }
 
-    // Step 4: merge partner profile into each call row
-    for (final call in callList) {
+    // Step 4: merge partner profile into each call row using new mutable maps
+    // (Supabase returns immutable maps — direct assignment would silently fail)
+    return callList.map((call) {
       final isUserA = call['user_a'] == user.id;
       final pid = isUserA ? call['user_b'] : call['user_a'];
-      if (pid != null) {
-        final profile = profileMap[pid as String];
-        if (isUserA) {
-          call['user_b_profile'] = profile;
-        } else {
-          call['user_a_profile'] = profile;
-        }
-      }
-    }
-
-    return callList;
+      final profile = pid != null ? profileMap[pid as String] : null;
+      return <String, dynamic>{
+        ...call,
+        if (isUserA) 'user_b_profile': profile else 'user_a_profile': profile,
+      };
+    }).toList();
   }
 }

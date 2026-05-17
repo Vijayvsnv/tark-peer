@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
@@ -37,19 +36,18 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   final _friendService = FriendService();
   final _auth = AuthService();
 
-  int _remaining = kCallDurationSeconds;
+  int _elapsed = 0;
   Timer? _timer;
   RealtimeChannel? _roomChannel;
 
   bool _micEnabled = true;
   bool _speakerEnabled = false;
-  bool _phoneCallActive = false; // true while a phone call is interrupting
-  int _audioRoute = -1; // -1 = default/earpiece
+  bool _phoneCallActive = false;
+  int _audioRoute = -1;
 
   bool _joining = true;
   bool _partnerSpeaking = false;
   String? _friendStatus;
-  bool _showWarning = false;
 
   // Pulse animation — plays when partner is speaking
   late AnimationController _pulseCtrl;
@@ -160,16 +158,12 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     _audioManager.onMuteChanged = _handlePhoneCallMute;
     await _audioManager.start();
 
-    // Countdown timer
+    // Elapsed timer — counts up, auto-disconnects at 100 min
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() {
-        _remaining--;
-        if (_remaining == 30 && !_showWarning) {
-          _showWarning = true;
-          HapticFeedback.mediumImpact();
-        }
-        if (_remaining <= 0) _endCall(reason: 'timer');
+        _elapsed++;
+        if (_elapsed >= kMaxCallDurationSeconds) _endCall(reason: 'timer');
       });
     });
 
@@ -313,9 +307,13 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     );
   }
 
-  String _formatTime(int secs) {
-    final m = secs ~/ 60;
+  String _formatElapsed(int secs) {
+    final h = secs ~/ 3600;
+    final m = (secs % 3600) ~/ 60;
     final s = secs % 60;
+    if (h > 0) {
+      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    }
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
@@ -407,26 +405,18 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
 
     return Column(
       children: [
-        // ── Timer — subtle, top center ────────────────────────────────────────
+        // ── Elapsed time — subtle, top center ────────────────────────────────
         const SizedBox(height: 16),
         Text(
-          _formatTime(_remaining),
-          style: TextStyle(
-            color: _showWarning ? const Color(0xFFFF6B6B) : Colors.white54,
+          _formatElapsed(_elapsed),
+          style: const TextStyle(
+            color: Colors.white54,
             fontSize: 18,
             fontWeight: FontWeight.w600,
             fontFamily: 'monospace',
             letterSpacing: 2,
           ),
         ),
-        if (_showWarning)
-          const Padding(
-            padding: EdgeInsets.only(top: 2),
-            child: Text(
-              '⚠  Ending soon',
-              style: TextStyle(color: Color(0xFFFF6B6B), fontSize: 11),
-            ),
-          ),
 
         const SizedBox(height: 28),
 
