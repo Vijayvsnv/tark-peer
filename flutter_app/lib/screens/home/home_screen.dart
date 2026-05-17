@@ -10,6 +10,7 @@ import '../../services/auth_service.dart';
 import '../../services/friend_service.dart';
 import '../../services/profile_service.dart';
 import '../../widgets/user_avatar.dart';
+import 'progress_tab.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -152,7 +153,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         children: [
           _buildComingSoon('Learn', Icons.book_outlined),
           _buildPracticeTab(),
-          _buildComingSoon('Progress', Icons.bar_chart_outlined),
+          const ProgressTab(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
