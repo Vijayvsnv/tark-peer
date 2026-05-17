@@ -9,6 +9,7 @@ import '../../models/user_profile.dart';
 import '../../services/auth_service.dart';
 import '../../services/friend_service.dart';
 import '../../services/profile_service.dart';
+import '../../services/update_service.dart';
 import '../../widgets/user_avatar.dart';
 import 'progress_tab.dart';
 
@@ -41,6 +42,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
     _loadAll();
     _statsTimer = Timer.periodic(const Duration(seconds: 15), (_) => _loadWaiting());
+    Future.delayed(const Duration(seconds: 2), _checkUpdate);
   }
 
   Future<void> _loadAll() async {
@@ -69,6 +71,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       final count = await _friendService.getPendingCount();
       if (mounted) setState(() => _pendingCount = count);
     } catch (_) {}
+  }
+
+  Future<void> _checkUpdate() async {
+    if (!mounted) return;
+    final info = await UpdateService().checkForUpdate();
+    if (info == null || !mounted) return;
+    _showUpdateDialog(info['version']!, info['url']!);
+  }
+
+  void _showUpdateDialog(String version, String url) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _UpdateDialog(version: version, downloadUrl: url),
+    );
   }
 
   @override
@@ -290,6 +307,94 @@ class _FindPartnerButton extends StatelessWidget {
     );
   }
 }
+
+// ── Update Dialog ─────────────────────────────────────────────────────────────
+
+class _UpdateDialog extends StatefulWidget {
+  final String version;
+  final String downloadUrl;
+  const _UpdateDialog({required this.version, required this.downloadUrl});
+
+  @override
+  State<_UpdateDialog> createState() => _UpdateDialogState();
+}
+
+class _UpdateDialogState extends State<_UpdateDialog> {
+  bool _downloading = false;
+  double _progress = 0;
+  String? _error;
+
+  Future<void> _startDownload() async {
+    setState(() { _downloading = true; _error = null; });
+    await UpdateService().downloadAndInstall(
+      widget.downloadUrl,
+      onProgress: (p) { if (mounted) setState(() => _progress = p); },
+      onError: (e) { if (mounted) setState(() { _error = e; _downloading = false; }); },
+      onDone: () { if (mounted) Navigator.pop(context); },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1A0B2E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      title: const Row(
+        children: [
+          Icon(Icons.system_update, color: kPrimary, size: 22),
+          SizedBox(width: 10),
+          Text('Update Available', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Version ${widget.version} ready to install',
+            style: const TextStyle(color: Color(0xFFB8B0CC), fontSize: 14),
+          ),
+          if (_downloading) ...[
+            const SizedBox(height: 20),
+            LinearProgressIndicator(
+              value: _progress,
+              backgroundColor: Colors.white12,
+              valueColor: const AlwaysStoppedAnimation<Color>(kPrimary),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${(_progress * 100).toInt()}% downloaded',
+              style: const TextStyle(color: Color(0xFFB8B0CC), fontSize: 12),
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+          ],
+        ],
+      ),
+      actions: _downloading
+          ? []
+          : [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Later', style: TextStyle(color: Color(0xFFB8B0CC))),
+              ),
+              ElevatedButton(
+                onPressed: _startDownload,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kPrimary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('Update Now'),
+              ),
+            ],
+    );
+  }
+}
+
+// ── Notifications Sheet ───────────────────────────────────────────────────────
 
 class _NotificationsSheet extends StatefulWidget {
   final List<Map<String, dynamic>> requests;
