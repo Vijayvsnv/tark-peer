@@ -12,6 +12,7 @@ import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../models/match_event.dart';
 import '../../services/auth_service.dart';
+import '../../services/call_audio_manager.dart';
 import '../../services/call_service.dart';
 import '../../services/friend_service.dart';
 import '../../widgets/user_avatar.dart';
@@ -32,6 +33,7 @@ class CallScreen extends StatefulWidget {
 
 class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   final _callService = CallService();
+  final _audioManager = CallAudioManager();
   final _friendService = FriendService();
   final _auth = AuthService();
 
@@ -41,6 +43,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
 
   bool _micEnabled = true;
   bool _speakerEnabled = false;
+  bool _phoneCallActive = false; // true while a phone call is interrupting
   int _audioRoute = -1; // -1 = default/earpiece
 
   bool _joining = true;
@@ -152,6 +155,11 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       )
       ..subscribe();
 
+    // Foreground service: keeps audio alive when screen locks or user switches apps.
+    // Audio focus listener: mutes Agora when a phone call comes in.
+    _audioManager.onMuteChanged = _handlePhoneCallMute;
+    await _audioManager.start();
+
     // Countdown timer
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
@@ -240,6 +248,9 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       } catch (_) {}
     }
 
+    // Stop foreground service + audio focus listener.
+    await _audioManager.stop();
+
     // Tell the backend to close the call and notify the partner.
     final token = _auth.accessToken;
     if (token != null) {
@@ -262,13 +273,26 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     if (mounted) context.go('/home');
   }
 
-  Future<void> _toggleMic() async {
-    await _callService.toggleMic();
+  // Called by CallAudioManager when a phone call starts/ends.
+  void _handlePhoneCallMute(bool muted) {
     if (!mounted) return;
-    setState(() => _micEnabled = !_micEnabled);
+    setState(() => _phoneCallActive = muted);
+    // Phone call started → force-mute Agora regardless of user's mic setting.
+    // Phone call ended  → restore to user's setting.
+    _callService.setMicMuted(!_micEnabled || muted);
+  }
+
+  Future<void> _toggleMic() async {
+    final next = !_micEnabled;
+    setState(() => _micEnabled = next);
+    // If a phone call is active, just save the preference — don't unmute Agora yet.
+    if (!_phoneCallActive) {
+      await _callService.setMicMuted(!next);
+    }
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(_micEnabled ? 'Mic unmuted' : 'Mic muted'),
+        content: Text(next ? 'Mic unmuted' : 'Mic muted'),
         duration: const Duration(seconds: 1),
         backgroundColor: const Color(0xFF2D1B4E),
       ),
@@ -309,6 +333,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   @override
   void dispose() {
     _timer?.cancel();
+    _audioManager.stop();
     final ch = _roomChannel;
     _roomChannel = null;
     if (ch != null) {

@@ -101,4 +101,11 @@ class CallService {
     await _engine?.setEnableSpeakerphone(enabled);
     debugPrint('[CallService] Speaker: $enabled');
   }
+
+  // Directly mute/unmute without changing _isMicEnabled.
+  // Used for external interruptions (phone calls) so user's preference is preserved.
+  Future<void> setMicMuted(bool muted) async {
+    await _engine?.muteLocalAudioStream(muted);
+    debugPrint('[CallService] Mic force-muted=$muted');
+  }
 }
