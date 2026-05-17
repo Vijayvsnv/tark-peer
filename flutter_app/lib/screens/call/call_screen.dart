@@ -442,27 +442,27 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
-                width: _partnerSpeaking ? 176 : 164,
-                height: _partnerSpeaking ? 176 : 164,
+                width: _partnerSpeaking ? 136 : 124,
+                height: _partnerSpeaking ? 136 : 124,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
                       color: kPrimary.withOpacity(_partnerSpeaking ? 0.55 : 0.2),
-                      blurRadius: _partnerSpeaking ? 32 : 14,
-                      spreadRadius: _partnerSpeaking ? 6 : 2,
+                      blurRadius: _partnerSpeaking ? 28 : 12,
+                      spreadRadius: _partnerSpeaking ? 5 : 2,
                     ),
                   ],
                 ),
               ),
               Container(
-                width: 158,
-                height: 158,
+                width: 118,
+                height: 118,
                 decoration: BoxDecoration(shape: BoxShape.circle, color: kPrimary),
               ),
               Container(
-                width: 150,
-                height: 150,
+                width: 110,
+                height: 110,
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
                   color: Color(0xFF1A0B2E),
@@ -471,7 +471,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                   child: UserAvatar(
                     name: partner.name,
                     imageUrl: partner.avatarUrl,
-                    radius: 75,
+                    radius: 55,
                   ),
                 ),
               ),
