@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../models/user_profile.dart';
 import '../../services/auth_service.dart';
@@ -21,6 +25,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   UserProfile? _profile;
   int _currentTab = 1;
   int _pendingCount = 0;
+  int _waiting = 0;
+  Timer? _statsTimer;
   late AnimationController _pulseCtrl;
   late Animation<double> _pulse;
 
@@ -33,10 +39,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
     _loadAll();
+    _statsTimer = Timer.periodic(const Duration(seconds: 15), (_) => _loadWaiting());
   }
 
   Future<void> _loadAll() async {
-    await Future.wait([_loadProfile(), _loadPendingCount()]);
+    await Future.wait([_loadProfile(), _loadPendingCount(), _loadWaiting()]);
+  }
+
+  Future<void> _loadWaiting() async {
+    try {
+      final resp = await http.get(Uri.parse('$kBackendUrl/stats'));
+      if (resp.statusCode == 200 && mounted) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        setState(() => _waiting = (data['waiting'] as num?)?.toInt() ?? 0);
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadProfile() async {
@@ -56,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   void dispose() {
     _pulseCtrl.dispose();
+    _statsTimer?.cancel();
     super.dispose();
   }
 
@@ -173,7 +191,39 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               'Connect with real people and practice',
               style: TextStyle(color: kTextSecondary, fontSize: 14),
             ),
-            const SizedBox(height: 48),
+            const SizedBox(height: 16),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              child: _waiting > 0
+                  ? Container(
+                      key: ValueKey(_waiting),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.green.withOpacity(0.35)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8, height: 8,
+                            decoration: const BoxDecoration(
+                              color: Colors.greenAccent,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '$_waiting ${_waiting == 1 ? 'person' : 'people'} waiting right now',
+                            style: const TextStyle(color: Colors.greenAccent, fontSize: 13, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    )
+                  : const SizedBox(key: ValueKey(0), height: 0),
+            ),
+            const SizedBox(height: 32),
             AnimatedBuilder(
               animation: _pulse,
               builder: (_, child) => Transform.scale(scale: _pulse.value, child: child),
