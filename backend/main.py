@@ -11,6 +11,9 @@ from routers.match import active_connections
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await redis_client.init_redis()
+    # Wipe leftover keys from any previous crash / restart so stale state
+    # never blocks the first match after a deploy.
+    await redis_client.clear_stale_state()
     yield
     await redis_client.close_redis()
 

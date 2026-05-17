@@ -38,12 +38,51 @@ class ProfileService {
   Future<List<Map<String, dynamic>>> getCallHistory() async {
     final user = _client.auth.currentUser;
     if (user == null) return [];
-    final resp = await _client
+
+    // Step 1: fetch call rows
+    final calls = await _client
         .from('call_history')
-        .select('*, user_a_profile:profiles!user_a(id,name,avatar_url), user_b_profile:profiles!user_b(id,name,avatar_url)')
+        .select('*')
         .or('user_a.eq.${user.id},user_b.eq.${user.id}')
         .order('started_at', ascending: false)
         .limit(10);
-    return List<Map<String, dynamic>>.from(resp);
+
+    final callList = List<Map<String, dynamic>>.from(calls);
+    if (callList.isEmpty) return callList;
+
+    // Step 2: collect unique partner IDs (avoids Supabase FK join issues)
+    final partnerIds = <String>{};
+    for (final call in callList) {
+      final pid = call['user_a'] == user.id ? call['user_b'] : call['user_a'];
+      if (pid != null) partnerIds.add(pid as String);
+    }
+
+    // Step 3: batch fetch partner profiles
+    final profileMap = <String, Map<String, dynamic>>{};
+    if (partnerIds.isNotEmpty) {
+      final profiles = await _client
+          .from('profiles')
+          .select('id,name,age,gender,avatar_url')
+          .inFilter('id', partnerIds.toList());
+      for (final p in List<Map<String, dynamic>>.from(profiles)) {
+        profileMap[p['id'] as String] = p;
+      }
+    }
+
+    // Step 4: merge partner profile into each call row
+    for (final call in callList) {
+      final isUserA = call['user_a'] == user.id;
+      final pid = isUserA ? call['user_b'] : call['user_a'];
+      if (pid != null) {
+        final profile = profileMap[pid as String];
+        if (isUserA) {
+          call['user_b_profile'] = profile;
+        } else {
+          call['user_a_profile'] = profile;
+        }
+      }
+    }
+
+    return callList;
   }
 }

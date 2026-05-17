@@ -1,15 +1,22 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../models/match_event.dart';
+import '../../services/auth_service.dart';
 import '../../services/call_service.dart';
 import '../../services/friend_service.dart';
 import '../../services/match_service.dart';
-import '../../services/auth_service.dart';
 import '../../widgets/user_avatar.dart';
-import '../../core/constants.dart';
+
+// Agora AudioRoute int constants
+const int _kRouteHeadset = 0;
+const int _kRouteEarpiece = 1;
+const int _kRouteHeadsetNoMic = 2;
+const int _kRouteBluetooth = 5;
 
 class CallScreen extends StatefulWidget {
   final MatchEvent event;
@@ -19,32 +26,66 @@ class CallScreen extends StatefulWidget {
   State<CallScreen> createState() => _CallScreenState();
 }
 
-class _CallScreenState extends State<CallScreen> {
+class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   final _callService = CallService();
   final _matchService = MatchService();
   final _friendService = FriendService();
   final _auth = AuthService();
+
   int _remaining = kCallDurationSeconds;
   Timer? _timer;
   StreamSubscription? _sub;
+
   bool _micEnabled = true;
+  bool _speakerEnabled = false;
+  int _audioRoute = -1; // -1 = default/earpiece
+
   bool _joining = true;
+  bool _partnerSpeaking = false;
   String? _friendStatus;
+  bool _showWarning = false;
+
+  // Pulse animation — plays when partner is speaking
+  late AnimationController _pulseCtrl;
+  late Animation<double> _pulseAnim;
+
+  // Fade animation — connecting screen
+  late AnimationController _fadeCtrl;
+  late Animation<double> _fadeAnim;
 
   @override
   void initState() {
     super.initState();
+
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 1.0, end: 1.10).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+
+    _fadeCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _fadeAnim = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeInOut),
+    );
+
     _start();
   }
 
   Future<void> _start() async {
+    // Mic permission
     final micStatus = await Permission.microphone.request();
     if (!micStatus.isGranted) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Microphone permission required'),
+            content: Text('Microphone access chahiye voice call ke liye'),
             backgroundColor: Colors.red,
+            duration: Duration(seconds: 4),
           ),
         );
         context.go('/home');
@@ -58,27 +99,63 @@ class _CallScreenState extends State<CallScreen> {
         channelName: widget.event.channelName,
         token: widget.event.agoraToken,
         uid: widget.event.agoraUid,
+        onUserJoined: (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Row(
+                  children: [
+                    Icon(Icons.person_add, color: Colors.white, size: 18),
+                    SizedBox(width: 8),
+                    Text('Partner joined!'),
+                  ],
+                ),
+                backgroundColor: Colors.green.shade700,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        },
+        onUserOffline: (_) => _endCall(reason: 'partner_left'),
+        onPartnerSpeaking: (speaking) {
+          if (mounted && speaking != _partnerSpeaking) {
+            setState(() => _partnerSpeaking = speaking);
+          }
+        },
+        onAudioRoutingChanged: (routing) {
+          if (mounted) setState(() => _audioRoute = routing);
+        },
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to join call: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Call join failed: $e'), backgroundColor: Colors.red),
         );
         context.go('/home');
         return;
       }
     }
 
+    // WebSocket for signalling (call_ended events)
     final token = _auth.accessToken;
     if (token != null) {
-      await _matchService.connect(token);
-      _sub = _matchService.events.listen(_onWsEvent);
+      try {
+        await _matchService.connect(token);
+        _sub = _matchService.events.listen(_onWsEvent);
+      } catch (_) {}
     }
 
+    // Countdown timer
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
-      setState(() => _remaining--);
-      if (_remaining <= 0) _endCall(reason: 'timer');
+      setState(() {
+        _remaining--;
+        if (_remaining == 30 && !_showWarning) {
+          _showWarning = true;
+          HapticFeedback.mediumImpact();
+        }
+        if (_remaining <= 0) _endCall(reason: 'timer');
+      });
     });
 
     if (mounted) setState(() => _joining = false);
@@ -98,18 +175,51 @@ class _CallScreenState extends State<CallScreen> {
     try {
       await _friendService.sendRequest(widget.event.partnerId);
       if (mounted) setState(() => _friendStatus = 'pending');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Friend request sent!'), backgroundColor: Colors.green),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Friend request sent!'), backgroundColor: Colors.green),
+        );
+      }
     } catch (_) {}
   }
 
   void _onWsEvent(Map<String, dynamic> msg) {
-    final type = msg['type'] as String?;
-    if (type == 'call_ended') {
-      final reason = msg['reason'] as String? ?? 'ended';
-      _endCall(reason: reason);
-    }
+    if (!mounted) return;
+    if (msg['type'] == 'call_ended') _endCall(reason: msg['reason'] as String? ?? 'ended');
+  }
+
+  Future<void> _confirmEndCall() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2D1B4E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text(
+          'End Call?',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'Are you sure you want to end this call?',
+          style: TextStyle(color: Color(0xFFB8B0CC)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Stay', style: TextStyle(color: Color(0xFF7C3AED))),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('End Call'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) _endCall(reason: 'manual');
   }
 
   Future<void> _endCall({String reason = 'manual'}) async {
@@ -123,19 +233,54 @@ class _CallScreenState extends State<CallScreen> {
 
   Future<void> _toggleMic() async {
     await _callService.toggleMic();
+    if (!mounted) return;
     setState(() => _micEnabled = !_micEnabled);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_micEnabled ? 'Mic unmuted' : 'Mic muted'),
+        duration: const Duration(seconds: 1),
+        backgroundColor: const Color(0xFF2D1B4E),
+      ),
+    );
   }
 
-  String _formatTime(int seconds) {
-    final m = seconds ~/ 60;
-    final s = seconds % 60;
+  Future<void> _toggleSpeaker() async {
+    final next = !_speakerEnabled;
+    await _callService.setSpeakerphone(next);
+    if (!mounted) return;
+    setState(() => _speakerEnabled = next);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(next ? 'Speaker on' : 'Speaker off'),
+        duration: const Duration(seconds: 1),
+        backgroundColor: const Color(0xFF2D1B4E),
+      ),
+    );
+  }
+
+  String _formatTime(int secs) {
+    final m = secs ~/ 60;
+    final s = secs % 60;
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  bool get _headphonesConnected =>
+      _audioRoute == _kRouteHeadset ||
+      _audioRoute == _kRouteHeadsetNoMic ||
+      _audioRoute == _kRouteBluetooth;
+
+  String get _earbdsLabel {
+    if (_audioRoute == _kRouteBluetooth) return 'BT';
+    if (_audioRoute == _kRouteHeadset || _audioRoute == _kRouteHeadsetNoMic) return 'Earbuds';
+    return 'Earpiece';
   }
 
   @override
   void dispose() {
     _timer?.cancel();
     _sub?.cancel();
+    _pulseCtrl.dispose();
+    _fadeCtrl.dispose();
     _callService.leaveCall();
     _matchService.dispose();
     super.dispose();
@@ -143,175 +288,382 @@ class _CallScreenState extends State<CallScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final partner = widget.event.partner;
-    final progress = _remaining / kCallDurationSeconds;
-
     return Scaffold(
-      backgroundColor: kBackground,
-      body: SafeArea(
-        child: _joining
-            ? const Center(child: CircularProgressIndicator(color: kPrimary))
-            : Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('In Call', style: TextStyle(color: kTextSecondary, fontSize: 14)),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: kSurface,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.timer_outlined,
-                                color: _remaining < 30 ? Colors.red : kPrimary,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                _formatTime(_remaining),
-                                style: TextStyle(
-                                  color: _remaining < 30 ? Colors.red : kTextPrimary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    LinearProgressIndicator(
-                      value: progress,
-                      backgroundColor: kSurface,
-                      valueColor: AlwaysStoppedAnimation(
-                        _remaining < 30 ? Colors.red : kPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 60),
-                    UserAvatar(
-                      name: partner.name,
-                      imageUrl: partner.avatarUrl,
-                      radius: 60,
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      partner.name,
-                      style: const TextStyle(
-                        color: kTextPrimary,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    if (partner.age != null || partner.gender != null)
-                      Text(
-                        [
-                          if (partner.age != null) '${partner.age} years',
-                          if (partner.gender != null) partner.gender!,
-                        ].join(' • '),
-                        style: const TextStyle(color: kTextSecondary, fontSize: 16),
-                      ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.green.withOpacity(0.3)),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.circle, color: Colors.green, size: 8),
-                          SizedBox(width: 6),
-                          Text('Connected', style: TextStyle(color: Colors.green, fontSize: 13)),
-                        ],
-                      ),
-                    ),
-                    const Spacer(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _ControlButton(
-                          icon: _micEnabled ? Icons.mic : Icons.mic_off,
-                          label: _micEnabled ? 'Mute' : 'Unmute',
-                          color: _micEnabled ? kSurface : Colors.orange,
-                          onTap: _toggleMic,
-                        ),
-                        _ControlButton(
-                          icon: Icons.call_end,
-                          label: 'End Call',
-                          color: Colors.red,
-                          size: 80,
-                          onTap: () => _endCall(reason: 'manual'),
-                        ),
-                        const SizedBox(width: 64),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    if (_friendStatus == null)
-                      TextButton.icon(
-                        onPressed: _addFriend,
-                        icon: const Icon(Icons.person_add, color: kPrimary, size: 18),
-                        label: const Text('Add Friend', style: TextStyle(color: kPrimary)),
-                      )
-                    else if (_friendStatus == 'pending')
-                      const Text('Request Sent', style: TextStyle(color: kTextSecondary, fontSize: 13))
-                    else if (_friendStatus == 'accepted')
-                      const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.people, color: Colors.green, size: 16),
-                          SizedBox(width: 4),
-                          Text('Friends', style: TextStyle(color: Colors.green, fontSize: 13)),
-                        ],
-                      ),
-                    const SizedBox(height: 16),
-                  ],
-                ),
-              ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF1A0B2E), Color(0xFF2D1B4E)],
+          ),
+        ),
+        child: SafeArea(
+          child: _joining ? _buildConnecting() : _buildCallUI(),
+        ),
       ),
     );
   }
+
+  // ── Connecting screen ────────────────────────────────────────────────────────
+
+  Widget _buildConnecting() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FadeTransition(
+            opacity: _fadeAnim,
+            child: Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: kPrimary.withOpacity(0.25),
+                border: Border.all(color: kPrimary.withOpacity(0.5), width: 2),
+              ),
+              child: const Icon(Icons.phone, color: Colors.white, size: 38),
+            ),
+          ),
+          const SizedBox(height: 28),
+          const Text(
+            'Connecting...',
+            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Setting up voice call',
+            style: TextStyle(color: Color(0xFFB8B0CC), fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Main call UI ─────────────────────────────────────────────────────────────
+
+  Widget _buildCallUI() {
+    final partner = widget.event.partner;
+
+    return Column(
+      children: [
+        // ── Top bar ──────────────────────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white60, size: 20),
+                onPressed: _confirmEndCall,
+                tooltip: 'End call',
+              ),
+              // Connection status badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.green.withOpacity(0.35)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.circle, color: Colors.greenAccent, size: 8),
+                    SizedBox(width: 6),
+                    Text('Connected', style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // ── Countdown timer ───────────────────────────────────────────────────
+        Text(
+          _formatTime(_remaining),
+          style: TextStyle(
+            color: _showWarning ? const Color(0xFFFF6B6B) : Colors.white,
+            fontSize: 52,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'monospace',
+            letterSpacing: 3,
+          ),
+        ),
+        Text(
+          _showWarning ? '⚠  Ending soon' : 'remaining',
+          style: TextStyle(
+            color: _showWarning
+                ? const Color(0xFFFF6B6B).withOpacity(0.85)
+                : Colors.white38,
+            fontSize: 13,
+            letterSpacing: 0.5,
+          ),
+        ),
+
+        const SizedBox(height: 36),
+
+        // ── Partner avatar ────────────────────────────────────────────────────
+        AnimatedBuilder(
+          animation: _pulseAnim,
+          builder: (_, child) => Transform.scale(
+            scale: _partnerSpeaking ? _pulseAnim.value : 1.0,
+            child: child,
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Glow halo — visible when partner speaks
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: _partnerSpeaking ? 176 : 164,
+                height: _partnerSpeaking ? 176 : 164,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: kPrimary.withOpacity(_partnerSpeaking ? 0.55 : 0.2),
+                      blurRadius: _partnerSpeaking ? 32 : 14,
+                      spreadRadius: _partnerSpeaking ? 6 : 2,
+                    ),
+                  ],
+                ),
+              ),
+              // Purple ring
+              Container(
+                width: 158,
+                height: 158,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: kPrimary,
+                ),
+              ),
+              // Avatar (inner circle slightly smaller)
+              Container(
+                width: 150,
+                height: 150,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFF1A0B2E),
+                ),
+                child: ClipOval(
+                  child: UserAvatar(
+                    name: partner.name,
+                    imageUrl: partner.avatarUrl,
+                    radius: 75,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 18),
+
+        // ── Partner name ──────────────────────────────────────────────────────
+        Text(
+          partner.name,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        if (partner.age != null || partner.gender != null)
+          Text(
+            [
+              if (partner.age != null) '${partner.age}',
+              if (partner.gender != null) partner.gender!,
+            ].join(' · '),
+            style: const TextStyle(color: Color(0xFFB8B0CC), fontSize: 14),
+          ),
+
+        const SizedBox(height: 14),
+
+        // ── Voice quality / speaking badge ────────────────────────────────────
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.07),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.graphic_eq,
+                color: _partnerSpeaking ? Colors.greenAccent : Colors.white38,
+                size: 15,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _partnerSpeaking ? 'Partner speaking...' : 'Voice quality: Good',
+                style: TextStyle(
+                  color: _partnerSpeaking ? Colors.greenAccent : Colors.white54,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const Spacer(),
+
+        // ── Friend row ────────────────────────────────────────────────────────
+        _buildFriendRow(),
+
+        const SizedBox(height: 22),
+
+        // ── 3 control buttons ─────────────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 36),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              // Mic toggle — red when muted
+              _ControlBtn(
+                icon: _micEnabled ? Icons.mic : Icons.mic_off,
+                label: _micEnabled ? 'Mic' : 'Muted',
+                active: !_micEnabled,
+                activeColor: const Color(0xFFEF4444),
+                onTap: _toggleMic,
+              ),
+              // Speaker toggle — purple when on
+              _ControlBtn(
+                icon: _speakerEnabled ? Icons.volume_up_rounded : Icons.volume_down_rounded,
+                label: 'Speaker',
+                active: _speakerEnabled,
+                activeColor: kPrimary,
+                onTap: _toggleSpeaker,
+              ),
+              // Earbuds — auto-detected, no manual tap
+              _ControlBtn(
+                icon: _headphonesConnected ? Icons.headphones : Icons.headset_off,
+                label: _earbdsLabel,
+                active: _headphonesConnected,
+                activeColor: kPrimary,
+                onTap: null,
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 30),
+
+        // ── End call button ───────────────────────────────────────────────────
+        Column(
+          children: [
+            GestureDetector(
+              onTap: _confirmEndCall,
+              child: Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFFEF4444),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.45),
+                      blurRadius: 22,
+                      spreadRadius: 4,
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.call_end, color: Colors.white, size: 30),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text('End Call', style: TextStyle(color: Colors.white54, fontSize: 12)),
+          ],
+        ),
+
+        const SizedBox(height: 30),
+      ],
+    );
+  }
+
+  Widget _buildFriendRow() {
+    if (_friendStatus == null) {
+      return TextButton.icon(
+        onPressed: _addFriend,
+        icon: const Icon(Icons.person_add_outlined, color: kPrimary, size: 18),
+        label: const Text('Add Friend', style: TextStyle(color: kPrimary, fontSize: 14)),
+      );
+    }
+    if (_friendStatus == 'pending') {
+      return const Text(
+        'Request Sent',
+        style: TextStyle(color: Colors.white38, fontSize: 13),
+      );
+    }
+    if (_friendStatus == 'accepted') {
+      return const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.people, color: Colors.greenAccent, size: 16),
+          SizedBox(width: 5),
+          Text('Friends', style: TextStyle(color: Colors.greenAccent, fontSize: 13)),
+        ],
+      );
+    }
+    return const SizedBox.shrink();
+  }
 }
 
-class _ControlButton extends StatelessWidget {
+// ── Reusable control button ───────────────────────────────────────────────────
+
+class _ControlBtn extends StatelessWidget {
   final IconData icon;
   final String label;
-  final Color color;
-  final double size;
-  final VoidCallback onTap;
+  final bool active;
+  final Color activeColor;
+  final VoidCallback? onTap;
 
-  const _ControlButton({
+  const _ControlBtn({
     required this.icon,
     required this.label,
-    required this.color,
+    required this.active,
+    required this.activeColor,
     required this.onTap,
-    this.size = 64,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        GestureDetector(
-          onTap: onTap,
-          child: Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-            child: Icon(icon, color: Colors.white, size: size * 0.45),
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: active ? activeColor : Colors.white.withOpacity(0.1),
+              border: Border.all(
+                color: active ? activeColor : Colors.white24,
+                width: 1.5,
+              ),
+            ),
+            child: Icon(icon, color: Colors.white, size: 26),
           ),
-        ),
-        const SizedBox(height: 8),
-        Text(label, style: const TextStyle(color: kTextSecondary, fontSize: 12)),
-      ],
+          const SizedBox(height: 7),
+          Text(
+            label,
+            style: TextStyle(
+              color: active ? Colors.white70 : Colors.white38,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
@@ -37,14 +37,18 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
 
   Future<void> _connect() async {
     final token = _auth.accessToken;
+    debugPrint('[MatchingScreen] Token: ${token != null ? "present (${token.length} chars)" : "NULL"}');
     if (token == null) {
       if (mounted) context.go('/login');
       return;
     }
+    debugPrint('[MatchingScreen] Calling MatchService.connect()...');
     try {
       await _matchService.connect(token);
+      debugPrint('[MatchingScreen] connect() returned — setting up listener');
       _sub = _matchService.events.listen(_onEvent);
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[MatchingScreen] Connection failed: $e\n$st');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Connection failed: $e'), backgroundColor: Colors.red),
@@ -55,12 +59,15 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
   }
 
   void _onEvent(Map<String, dynamic> msg) {
+    debugPrint('[MatchingScreen] Event received: $msg');
     if (!mounted) return;
     final type = msg['type'] as String?;
     if (type == 'matched') {
+      debugPrint('[MatchingScreen] Match found! Going to /call');
       final event = MatchEvent.fromJson(msg);
       context.go('/call', extra: event);
     } else if (type == 'call_ended' || type == 'error') {
+      debugPrint('[MatchingScreen] call_ended/error — going home. msg=$msg');
       context.go('/home');
     }
   }
