@@ -69,7 +69,7 @@ async def _fetch_profile(user_id: str) -> dict:
     try:
         row = (
             supabase_admin.table("profiles")
-            .select("name,age,gender,avatar_url")
+            .select("name,age,gender,avatar_url,bio")
             .eq("id", user_id)
             .single()
             .execute()
@@ -93,6 +93,7 @@ def _build_match_payload(channel_name: str, my_token: str, my_uid: int,
             "age": partner_profile.get("age"),
             "gender": partner_profile.get("gender"),
             "avatar_url": partner_profile.get("avatar_url"),
+            "bio": partner_profile.get("bio"),
         },
     }
 

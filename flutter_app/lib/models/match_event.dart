@@ -3,19 +3,22 @@ class PartnerInfo {
   final int? age;
   final String? gender;
   final String? avatarUrl;
+  final String? bio;
 
   const PartnerInfo({
     required this.name,
     this.age,
     this.gender,
     this.avatarUrl,
+    this.bio,
   });
 
   factory PartnerInfo.fromJson(Map<String, dynamic> json) => PartnerInfo(
-        name: json['name'] as String,
+        name: json['name'] as String? ?? 'User',
         age: json['age'] as int?,
         gender: json['gender'] as String?,
         avatarUrl: json['avatar_url'] as String?,
+        bio: json['bio'] as String?,
       );
 }
 

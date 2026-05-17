@@ -407,63 +407,28 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
 
     return Column(
       children: [
-        // ── Top bar ──────────────────────────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white60, size: 20),
-                onPressed: _confirmEndCall,
-                tooltip: 'End call',
-              ),
-              // Connection status badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.green.withOpacity(0.35)),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.circle, color: Colors.greenAccent, size: 8),
-                    SizedBox(width: 6),
-                    Text('Connected', style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        // ── Countdown timer ───────────────────────────────────────────────────
+        // ── Timer — subtle, top center ────────────────────────────────────────
+        const SizedBox(height: 16),
         Text(
           _formatTime(_remaining),
           style: TextStyle(
-            color: _showWarning ? const Color(0xFFFF6B6B) : Colors.white,
-            fontSize: 52,
-            fontWeight: FontWeight.bold,
+            color: _showWarning ? const Color(0xFFFF6B6B) : Colors.white54,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
             fontFamily: 'monospace',
-            letterSpacing: 3,
+            letterSpacing: 2,
           ),
         ),
-        Text(
-          _showWarning ? '⚠  Ending soon' : 'remaining',
-          style: TextStyle(
-            color: _showWarning
-                ? const Color(0xFFFF6B6B).withOpacity(0.85)
-                : Colors.white38,
-            fontSize: 13,
-            letterSpacing: 0.5,
+        if (_showWarning)
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Text(
+              '⚠  Ending soon',
+              style: TextStyle(color: Color(0xFFFF6B6B), fontSize: 11),
+            ),
           ),
-        ),
 
-        const SizedBox(height: 36),
+        const SizedBox(height: 28),
 
         // ── Partner avatar ────────────────────────────────────────────────────
         AnimatedBuilder(
@@ -475,7 +440,6 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Glow halo — visible when partner speaks
               AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 width: _partnerSpeaking ? 176 : 164,
@@ -491,16 +455,11 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                   ],
                 ),
               ),
-              // Purple ring
               Container(
                 width: 158,
                 height: 158,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: kPrimary,
-                ),
+                decoration: BoxDecoration(shape: BoxShape.circle, color: kPrimary),
               ),
-              // Avatar (inner circle slightly smaller)
               Container(
                 width: 150,
                 height: 150,
@@ -527,26 +486,48 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
           partner.name,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 22,
+            fontSize: 24,
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 4),
-        if (partner.age != null || partner.gender != null)
+
+        // ── Age / gender ──────────────────────────────────────────────────────
+        if (partner.age != null || partner.gender != null) ...[
+          const SizedBox(height: 4),
           Text(
             [
               if (partner.age != null) '${partner.age}',
               if (partner.gender != null) partner.gender!,
             ].join(' · '),
-            style: const TextStyle(color: Color(0xFFB8B0CC), fontSize: 14),
+            style: const TextStyle(color: Color(0xFFB8B0CC), fontSize: 13),
           ),
+        ],
 
-        const SizedBox(height: 14),
+        // ── Bio ───────────────────────────────────────────────────────────────
+        if (partner.bio != null && partner.bio!.trim().isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              partner.bio!,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFFB8B0CC),
+                fontSize: 13,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+        ],
 
-        // ── Voice quality / speaking badge ────────────────────────────────────
+        const SizedBox(height: 12),
+
+        // ── Speaking indicator ────────────────────────────────────────────────
         AnimatedContainer(
           duration: const Duration(milliseconds: 250),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.07),
             borderRadius: BorderRadius.circular(22),
@@ -558,14 +539,14 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
               Icon(
                 Icons.graphic_eq,
                 color: _partnerSpeaking ? Colors.greenAccent : Colors.white38,
-                size: 15,
+                size: 14,
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
               Text(
-                _partnerSpeaking ? 'Partner speaking...' : 'Voice quality: Good',
+                _partnerSpeaking ? 'Speaking...' : 'Listening',
                 style: TextStyle(
-                  color: _partnerSpeaking ? Colors.greenAccent : Colors.white54,
-                  fontSize: 12,
+                  color: _partnerSpeaking ? Colors.greenAccent : Colors.white38,
+                  fontSize: 11,
                 ),
               ),
             ],
@@ -585,7 +566,6 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              // Mic toggle — red when muted
               _ControlBtn(
                 icon: _micEnabled ? Icons.mic : Icons.mic_off,
                 label: _micEnabled ? 'Mic' : 'Muted',
@@ -593,7 +573,6 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                 activeColor: const Color(0xFFEF4444),
                 onTap: _toggleMic,
               ),
-              // Speaker toggle — purple when on
               _ControlBtn(
                 icon: _speakerEnabled ? Icons.volume_up_rounded : Icons.volume_down_rounded,
                 label: 'Speaker',
