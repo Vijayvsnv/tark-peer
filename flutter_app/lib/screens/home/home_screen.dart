@@ -190,71 +190,76 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Widget _buildPracticeTab() {
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          children: [
-            const SizedBox(height: 24),
-            const Text(
-              'Practice with Humans',
-              style: TextStyle(
-                color: kTextPrimary,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 32),
+          const Text(
+            'Practice with Humans',
+            style: TextStyle(
+              color: kTextPrimary,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'Connect with real people and practice',
-              style: TextStyle(color: kTextSecondary, fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 400),
-              child: _waiting > 0
-                  ? Container(
-                      key: ValueKey(_waiting),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.green.withOpacity(0.35)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 8, height: 8,
-                            decoration: const BoxDecoration(
-                              color: Colors.greenAccent,
-                              shape: BoxShape.circle,
-                            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Connect with real people and practice',
+            style: TextStyle(color: kTextSecondary, fontSize: 14),
+          ),
+          const Spacer(),
+          Center(
+            child: Column(
+              children: [
+                AnimatedBuilder(
+                  animation: _pulse,
+                  builder: (_, child) => Transform.scale(scale: _pulse.value, child: child),
+                  child: _FindPartnerButton(onTap: () => context.go('/matching')),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Tap to find a random partner',
+                  style: TextStyle(color: kTextSecondary, fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 400),
+                  child: _waiting > 0
+                      ? Container(
+                          key: ValueKey(_waiting),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.green.withOpacity(0.35)),
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '$_waiting ${_waiting == 1 ? 'person' : 'people'} waiting right now',
-                            style: const TextStyle(color: Colors.greenAccent, fontSize: 13, fontWeight: FontWeight.w500),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8, height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Colors.greenAccent,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '$_waiting ${_waiting == 1 ? 'person' : 'people'} waiting right now',
+                                style: const TextStyle(color: Colors.greenAccent, fontSize: 13, fontWeight: FontWeight.w500),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    )
-                  : const SizedBox(key: ValueKey(0), height: 0),
+                        )
+                      : const SizedBox(key: ValueKey(0), height: 0),
+                ),
+              ],
             ),
-            const SizedBox(height: 32),
-            AnimatedBuilder(
-              animation: _pulse,
-              builder: (_, child) => Transform.scale(scale: _pulse.value, child: child),
-              child: _FindPartnerButton(onTap: () => context.go('/matching')),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Tap to find a random partner',
-              style: TextStyle(color: kTextSecondary, fontSize: 14),
-            ),
-            const SizedBox(height: 32),
-          ],
-        ),
+          ),
+          const Spacer(),
+        ],
       ),
     );
   }
