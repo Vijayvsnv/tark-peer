@@ -522,37 +522,6 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
           ),
         ],
 
-        const SizedBox(height: 12),
-
-        // ── Speaking indicator ────────────────────────────────────────────────
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.07),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.graphic_eq,
-                color: _partnerSpeaking ? Colors.greenAccent : Colors.white38,
-                size: 14,
-              ),
-              const SizedBox(width: 5),
-              Text(
-                _partnerSpeaking ? 'Speaking...' : 'Listening',
-                style: TextStyle(
-                  color: _partnerSpeaking ? Colors.greenAccent : Colors.white38,
-                  fontSize: 11,
-                ),
-              ),
-            ],
-          ),
-        ),
-
         const Spacer(),
 
         // ── Friend row ────────────────────────────────────────────────────────
