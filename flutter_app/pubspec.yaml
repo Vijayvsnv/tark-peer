@@ -2,7 +2,7 @@ name: tark_peer
 description: Random voice call app - Tark Peer
 
 publish_to: 'none'
-version: 1.0.1+2
+version: 1.0.2+3
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -22,9 +22,7 @@ dependencies:
   http: ^1.2.0
   flutter_foreground_task: ^8.14.0
   package_info_plus: ^8.1.0
-  dio: ^5.7.0
-  open_file: ^3.3.2
-  path_provider: ^2.1.4
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:

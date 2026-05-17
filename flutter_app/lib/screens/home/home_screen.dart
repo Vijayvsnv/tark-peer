@@ -325,18 +325,9 @@ class _UpdateDialog extends StatefulWidget {
 }
 
 class _UpdateDialogState extends State<_UpdateDialog> {
-  bool _downloading = false;
-  double _progress = 0;
-  String? _error;
-
-  Future<void> _startDownload() async {
-    setState(() { _downloading = true; _error = null; });
-    await UpdateService().downloadAndInstall(
-      widget.downloadUrl,
-      onProgress: (p) { if (mounted) setState(() => _progress = p); },
-      onError: (e) { if (mounted) setState(() { _error = e; _downloading = false; }); },
-      onDone: () { if (mounted) Navigator.pop(context); },
-    );
+  Future<void> _update() async {
+    Navigator.pop(context);
+    await UpdateService().openDownloadUrl(widget.downloadUrl);
   }
 
   @override
@@ -351,43 +342,17 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           Text('Update Available', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
         ],
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Version ${widget.version} ready to install',
-            style: const TextStyle(color: Color(0xFFB8B0CC), fontSize: 14),
-          ),
-          if (_downloading) ...[
-            const SizedBox(height: 20),
-            LinearProgressIndicator(
-              value: _progress,
-              backgroundColor: Colors.white12,
-              valueColor: const AlwaysStoppedAnimation<Color>(kPrimary),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${(_progress * 100).toInt()}% downloaded',
-              style: const TextStyle(color: Color(0xFFB8B0CC), fontSize: 12),
-            ),
-          ],
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
-          ],
-        ],
+      content: Text(
+        'Version ${widget.version} available.\nBrowser mein download hoga, phir install karo.',
+        style: const TextStyle(color: Color(0xFFB8B0CC), fontSize: 14),
       ),
-      actions: _downloading
-          ? []
-          : [
+      actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Later', style: TextStyle(color: Color(0xFFB8B0CC))),
               ),
               ElevatedButton(
-                onPressed: _startDownload,
+                onPressed: _update,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: kPrimary,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

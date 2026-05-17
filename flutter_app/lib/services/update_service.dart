@@ -1,24 +1,24 @@
-import 'package:dio/dio.dart';
-import 'package:open_file/open_file.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class UpdateService {
   static const _apiUrl =
       'https://api.github.com/repos/Vijayvsnv/tark-peer/releases/latest';
 
-  /// Returns {version, url} if a newer release exists, null otherwise.
   Future<Map<String, String>?> checkForUpdate() async {
     try {
       final info = await PackageInfo.fromPlatform();
       final current = info.version;
 
-      final resp = await Dio().get(
-        _apiUrl,
-        options: Options(headers: {'Accept': 'application/vnd.github+json'}),
+      final resp = await http.get(
+        Uri.parse(_apiUrl),
+        headers: {'Accept': 'application/vnd.github+json'},
       );
-      final data = resp.data as Map<String, dynamic>;
+      if (resp.statusCode != 200) return null;
 
+      final data = jsonDecode(resp.body) as Map<String, dynamic>;
       final tag = (data['tag_name'] as String? ?? '').replaceAll('v', '');
       if (tag.isEmpty || !_isNewer(current, tag)) return null;
 
@@ -39,33 +39,9 @@ class UpdateService {
     }
   }
 
-  /// Downloads the APK and opens the system installer.
-  Future<void> downloadAndInstall(
-    String url, {
-    required void Function(double progress) onProgress,
-    required void Function(String error) onError,
-    required void Function() onDone,
-  }) async {
-    try {
-      final dir = await getTemporaryDirectory();
-      final path = '${dir.path}/tark_peer_update.apk';
-
-      await Dio().download(
-        url,
-        path,
-        onReceiveProgress: (received, total) {
-          if (total > 0) onProgress(received / total);
-        },
-      );
-
-      onDone();
-      final result = await OpenFile.open(path);
-      if (result.type != ResultType.done) {
-        onError('Install karne mein problem: ${result.message}');
-      }
-    } catch (e) {
-      onError('Download fail hua, dobara try karo');
-    }
+  Future<void> openDownloadUrl(String url) async {
+    final uri = Uri.parse(url);
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   bool _isNewer(String current, String latest) {
