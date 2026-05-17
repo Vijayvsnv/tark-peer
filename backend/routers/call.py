@@ -59,9 +59,17 @@ async def end_call(data: CallEndEvent, authorization: str = Header(...)):
         except (TypeError, ValueError):
             pass
 
-    # Mark history row closed.
+    # Determine ended_by from DB constraint values: user_a / user_b / timer / disconnect
+    if data.reason == "timer":
+        ended_by = "timer"
+    elif data.reason == "disconnect":
+        ended_by = "disconnect"
+    else:
+        # "manual" or anything else — map to user_a or user_b based on who called
+        ended_by = "user_a" if info and user_id == info.get("user_a") else "user_b"
+
     now_iso = datetime.now(timezone.utc).isoformat()
-    update: dict = {"ended_at": now_iso, "ended_by": data.reason or "user"}
+    update: dict = {"ended_at": now_iso, "ended_by": ended_by}
     if duration_seconds is not None:
         update["duration_seconds"] = duration_seconds
     try:

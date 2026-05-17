@@ -46,6 +46,11 @@ from services.supabase_realtime import broadcast
 router = APIRouter(tags=["match"])
 logger = logging.getLogger(__name__)
 
+# Per-process WS registry — used ONLY to deliver the "matched" event directly
+# to the partner if they happen to be on the same pod.  NOT used for call
+# lifecycle.  Stateless design is preserved: Realtime is the authoritative path.
+_active_ws: dict[str, WebSocket] = {}
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -193,6 +198,7 @@ async def websocket_match(websocket: WebSocket, token: str = Query(...)):
     await redis_client.add_to_queue(user_id)
     await _send_ws(websocket, {"type": "waiting"})
 
+    _active_ws[user_id] = websocket
     matcher = asyncio.create_task(_matcher_loop(user_id, websocket))
 
     try:
@@ -213,8 +219,7 @@ async def websocket_match(websocket: WebSocket, token: str = Query(...)):
         pass
     finally:
         matcher.cancel()
-        # The only cleanup we ever do here: drop the user from the queue.
-        # Room state (if any) is owned by /call/end and the expiry scanner.
+        _active_ws.pop(user_id, None)
         await redis_client.remove_from_queue(user_id)
         try:
             await websocket.close()
@@ -252,9 +257,16 @@ async def _matcher_loop(user_id: str, websocket: WebSocket):
                 broadcast(f"user:{partner_id}", "matched", payload_partner),
             )
 
-            # Fast-path: also push to our own WS so the calling client never
-            # has to wait for the Realtime round-trip.
-            await _send_ws(websocket, {"type": "matched", **payload_me})
+            # Fast-path WS delivery for BOTH users (same-pod only).
+            # Partner relies on Realtime if on a different pod — that's fine.
+            # Deduplication on the Flutter side (_matchReceived flag) handles
+            # the case where partner gets both WS + Realtime.
+            partner_ws = _active_ws.get(partner_id)
+            await asyncio.gather(
+                _send_ws(websocket, {"type": "matched", **payload_me}),
+                _send_ws(partner_ws, {"type": "matched", **payload_partner})
+                if partner_ws else asyncio.sleep(0),
+            )
             return
 
     except asyncio.CancelledError:
