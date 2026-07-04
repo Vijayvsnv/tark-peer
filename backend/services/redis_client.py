@@ -32,7 +32,7 @@ redis: aioredis.Redis = None  # set by init_redis()
 
 # ── TTLs ──────────────────────────────────────────────────────────────────────
 
-CALL_DURATION = 6000              # 100 min — max call length
+CALL_DURATION = 1800              # 30 min — max call length
 ROOM_TTL = CALL_DURATION + 300    # 105 min — Redis safety net on call state
 QUEUE_TTL = 60                    # 60 s — drop waiters that stop heartbeating
 
