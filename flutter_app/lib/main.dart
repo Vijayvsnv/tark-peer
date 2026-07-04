@@ -16,6 +16,8 @@ import 'screens/profile/profile_screen.dart';
 import 'screens/profile/friends_screen.dart';
 import 'screens/profile/friend_profile_screen.dart';
 import 'screens/profile/call_history_screen.dart';
+import 'screens/chat/chat_list_screen.dart';
+import 'screens/chat/chat_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,6 +46,11 @@ final _router = GoRouter(
       builder: (_, state) => FriendProfileScreen(userId: state.pathParameters['id']!),
     ),
     GoRoute(path: '/calls', builder: (_, __) => const CallHistoryScreen()),
+    GoRoute(path: '/chat', builder: (_, __) => const ChatListScreen()),
+    GoRoute(
+      path: '/chat/:friendId',
+      builder: (_, state) => ChatScreen(friendId: state.pathParameters['friendId']!),
+    ),
     GoRoute(path: '/matching', builder: (_, __) => const MatchingScreen()),
     GoRoute(
       path: '/call',

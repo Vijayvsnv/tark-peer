@@ -66,6 +66,17 @@ async def _expire_one_room(channel_name: str):
     await redis_client.deregister_active_room(channel_name)
 
 
+async def message_cleanup():
+    """Deletes expired messages every hour."""
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            supabase_admin.rpc("delete_expired_messages").execute()
+            logger.info("message cleanup: expired messages deleted")
+        except Exception as e:
+            logger.warning("message cleanup failed: %r", e)
+
+
 async def call_expiry_scanner():
     """
     Forever-loop: every _EXPIRY_SCAN_INTERVAL_S, atomically claim every room
@@ -94,12 +105,14 @@ async def lifespan(app: FastAPI):
     await redis_client.init_redis()
     await redis_client.clear_stale_state()
     scanner = asyncio.create_task(call_expiry_scanner())
+    msg_cleaner = asyncio.create_task(message_cleanup())
     try:
         yield
     finally:
         scanner.cancel()
+        msg_cleaner.cancel()
         try:
-            await scanner
+            await asyncio.gather(scanner, msg_cleaner, return_exceptions=True)
         except (asyncio.CancelledError, Exception):
             pass
         await redis_client.close_redis()

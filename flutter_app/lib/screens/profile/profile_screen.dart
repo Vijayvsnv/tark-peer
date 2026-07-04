@@ -69,6 +69,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     style: const TextStyle(
                       color: kTextPrimary, fontSize: 22, fontWeight: FontWeight.bold),
                   ),
+                  if ((_profile?.ratingCount ?? 0) > 0) ...[
+                    const SizedBox(height: 6),
+                    _RatingBadge(
+                      avg: _profile!.avgRating,
+                      count: _profile!.ratingCount,
+                    ),
+                  ],
                   if (_profile?.bio != null && _profile!.bio!.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
@@ -167,10 +174,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      onPressed: () async {
-                        await _auth.signOut();
-                        if (mounted) context.go('/login');
-                      },
+                      onPressed: _confirmLogout,
                       icon: const Icon(Icons.logout, color: kDanger),
                       label: const Text('Logout', style: TextStyle(color: kDanger, fontWeight: FontWeight.w600)),
                       style: OutlinedButton.styleFrom(
@@ -185,6 +189,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
     );
+  }
+
+  Future<void> _confirmLogout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Logout?',
+          style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'You will be signed out of Tark Peer.',
+          style: TextStyle(color: kTextSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: kTextSecondary, fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kDanger,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await _auth.signOut();
+      if (mounted) context.go('/login');
+    }
   }
 
   Widget _navCard(
@@ -221,6 +262,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text(label, style: const TextStyle(color: kTextPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _RatingBadge extends StatelessWidget {
+  final double avg;
+  final int count;
+
+  const _RatingBadge({required this.avg, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFC933).withOpacity(0.14),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.star_rounded, color: Color(0xFFEAB308), size: 16),
+          const SizedBox(width: 4),
+          Text(
+            avg.toStringAsFixed(1),
+            style: const TextStyle(
+              color: Color(0xFF8B6D0B),
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '($count)',
+            style: const TextStyle(color: kTextSecondary, fontSize: 12),
+          ),
+        ],
       ),
     );
   }

@@ -111,14 +111,24 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kPrimary))
-          : _calls.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No calls yet',
-                    style: TextStyle(color: kTextSecondary, fontSize: 14),
-                  ),
-                )
-              : ListView.separated(
+          : RefreshIndicator(
+              color: kPrimary,
+              onRefresh: _load,
+              child: _calls.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: const [
+                        SizedBox(height: 160),
+                        Center(
+                          child: Text(
+                            'No calls yet',
+                            style: TextStyle(color: kTextSecondary, fontSize: 14),
+                          ),
+                        ),
+                      ],
+                    )
+                  : ListView.separated(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                   itemCount: _calls.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
@@ -178,6 +188,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                     );
                   },
                 ),
+            ),
     );
   }
 }

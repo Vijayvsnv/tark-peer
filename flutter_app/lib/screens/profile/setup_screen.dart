@@ -3,7 +3,9 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../data/locations.dart';
 import '../../services/profile_service.dart';
+import '../../widgets/avatar_picker_sheet.dart';
 import '../../widgets/custom_button.dart';
+import '../../widgets/user_avatar.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -25,6 +27,7 @@ class _SetupScreenState extends State<SetupScreen> {
   String? _country;
   String? _state;
   String? _motherTongue;
+  String? _avatarUrl;
   bool _loading = false;
   bool _initialLoading = true;
 
@@ -53,6 +56,7 @@ class _SetupScreenState extends State<SetupScreen> {
           _motherTongue = (p.motherTongue != null && kLanguages.contains(p.motherTongue))
               ? p.motherTongue
               : null;
+          _avatarUrl = p.avatarUrl;
           _initialLoading = false;
         });
       } else {
@@ -111,6 +115,7 @@ class _SetupScreenState extends State<SetupScreen> {
         country: _country,
         state: finalState,
         motherTongue: _motherTongue,
+        avatarUrl: _avatarUrl,
       );
       if (!mounted) return;
       context.go('/home');
@@ -149,6 +154,8 @@ class _SetupScreenState extends State<SetupScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Center(child: _avatarPickerCircle()),
+              const SizedBox(height: 24),
               const Text(
                 'Tell us about yourself',
                 style: TextStyle(color: kTextPrimary, fontSize: 24, fontWeight: FontWeight.bold),
@@ -309,6 +316,50 @@ class _SetupScreenState extends State<SetupScreen> {
         ),
       ),
     );
+  }
+
+  Widget _avatarPickerCircle() {
+    return GestureDetector(
+      onTap: _openAvatarPicker,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          UserAvatar(
+            name: _nameCtrl.text.trim().isEmpty ? 'U' : _nameCtrl.text.trim(),
+            imageUrl: _avatarUrl,
+            radius: 52,
+          ),
+          Positioned(
+            right: -2,
+            bottom: -2,
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: kPrimary,
+                shape: BoxShape.circle,
+                border: Border.all(color: kBackground, width: 2),
+              ),
+              child: const Icon(Icons.edit, color: Colors.white, size: 14),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openAvatarPicker() async {
+    final result = await showModalBottomSheet<String?>(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (_) => const AvatarPickerSheet(),
+    );
+    if (result != null && mounted) {
+      setState(() => _avatarUrl = result);
+    }
   }
 
   Widget _disabledStatePlaceholder() {

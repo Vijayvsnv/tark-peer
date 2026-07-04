@@ -9,6 +9,7 @@ import '../../models/user_profile.dart';
 import '../../services/auth_service.dart';
 import '../../services/friend_service.dart';
 import '../../services/profile_service.dart';
+import '../../services/presence_service.dart';
 import '../../services/update_service.dart';
 import '../../widgets/user_avatar.dart';
 import 'progress_tab.dart';
@@ -24,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   final _auth = AuthService();
   final _profileService = ProfileService();
   final _friendService = FriendService();
+  final _presenceService = PresenceService();
   UserProfile? _profile;
   int _currentTab = 1;
   int _pendingCount = 0;
@@ -43,6 +45,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _loadAll();
     _statsTimer = Timer.periodic(const Duration(seconds: 15), (_) => _loadWaiting());
     Future.delayed(const Duration(seconds: 2), _checkUpdate);
+    _presenceService.setOnline();
   }
 
   Future<void> _loadAll() async {
@@ -90,6 +93,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   @override
   void dispose() {
+    _presenceService.setOffline();
     _pulseCtrl.dispose();
     _statsTimer?.cancel();
     super.dispose();
@@ -154,6 +158,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ),
         centerTitle: true,
         actions: [
+          GestureDetector(
+            onTap: () => context.go('/chat'),
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Icon(Icons.chat_bubble_outline_rounded, color: kPrimary, size: 26),
+            ),
+          ),
           GestureDetector(
             onTap: () => context.go('/profile'),
             child: Padding(

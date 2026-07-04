@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Header, HTTPException
 
-from models.schemas import CallEndEvent
+from models.schemas import CallEndEvent, CallRateEvent
 from services import redis_client
 from services.supabase_client import supabase_admin
 from services.supabase_realtime import broadcast
@@ -93,5 +93,41 @@ async def end_call(data: CallEndEvent, authorization: str = Header(...)):
         "call_ended",
         {"reason": data.reason or "user", "ended_by": user_id},
     )
+
+    return {"status": "ok"}
+
+
+@router.post("/rate")
+async def rate_call(data: CallRateEvent, authorization: str = Header(...)):
+    """
+    Record a 1-5 star rating for the partner after a call.
+    Idempotent per (room_id, rater_id) via unique constraint — an UPSERT
+    lets the user change their mind before leaving the screen.
+    """
+    if not (1 <= data.stars <= 5):
+        raise HTTPException(status_code=400, detail="Stars must be 1-5")
+    if not data.rated_user_id or not data.channel_name:
+        raise HTTPException(status_code=400, detail="Missing fields")
+
+    token = authorization.replace("Bearer ", "")
+    user = await _get_user(token)
+    rater_id = user["id"]
+
+    if rater_id == data.rated_user_id:
+        raise HTTPException(status_code=400, detail="Cannot rate yourself")
+
+    try:
+        supabase_admin.table("call_ratings").upsert(
+            {
+                "room_id": data.channel_name,
+                "rater_id": rater_id,
+                "rated_id": data.rated_user_id,
+                "stars": data.stars,
+            },
+            on_conflict="room_id,rater_id",
+        ).execute()
+    except Exception as e:
+        logger.warning("rating insert failed: %r", e)
+        raise HTTPException(status_code=500, detail="Rating save failed")
 
     return {"status": "ok"}

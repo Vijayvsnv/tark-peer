@@ -75,7 +75,7 @@ class FriendService {
     // Step 3: batch fetch partner profiles
     final profiles = await _client
         .from('profiles')
-        .select('id, name, avatar_url, age, gender, bio, occupation, sector, country, state, mother_tongue')
+        .select('id, name, avatar_url, age, gender, bio, occupation, sector, country, state, mother_tongue, avg_rating, rating_count')
         .inFilter('id', partnerIds);
 
     final profileMap = <String, Map<String, dynamic>>{};

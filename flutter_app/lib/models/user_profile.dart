@@ -10,6 +10,8 @@ class UserProfile {
   final String? country;
   final String? state;
   final String? motherTongue;
+  final double avgRating;
+  final int ratingCount;
   final bool isPremium;
   final int totalCalls;
 
@@ -25,6 +27,8 @@ class UserProfile {
     this.country,
     this.state,
     this.motherTongue,
+    this.avgRating = 0,
+    this.ratingCount = 0,
     this.isPremium = false,
     this.totalCalls = 0,
   });
@@ -41,6 +45,8 @@ class UserProfile {
         country: json['country'] as String?,
         state: json['state'] as String?,
         motherTongue: json['mother_tongue'] as String?,
+        avgRating: (json['avg_rating'] as num?)?.toDouble() ?? 0,
+        ratingCount: (json['rating_count'] as int?) ?? 0,
         isPremium: (json['is_premium'] as bool?) ?? false,
         totalCalls: (json['total_calls'] as int?) ?? 0,
       );

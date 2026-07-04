@@ -79,6 +79,10 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      if (_profile!.ratingCount > 0) ...[
+                        const SizedBox(height: 6),
+                        _RatingChip(avg: _profile!.avgRating, count: _profile!.ratingCount),
+                      ],
                       const SizedBox(height: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -183,6 +187,44 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
             if (i < rows.length - 1)
               const Divider(height: 1, color: kBorder, indent: 52, endIndent: 16),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RatingChip extends StatelessWidget {
+  final double avg;
+  final int count;
+
+  const _RatingChip({required this.avg, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFC933).withOpacity(0.14),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.star_rounded, color: Color(0xFFEAB308), size: 16),
+          const SizedBox(width: 4),
+          Text(
+            avg.toStringAsFixed(1),
+            style: const TextStyle(
+              color: Color(0xFF8B6D0B),
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '($count)',
+            style: const TextStyle(color: kTextSecondary, fontSize: 12),
+          ),
         ],
       ),
     );

@@ -190,7 +190,24 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
                 'seconds remaining',
                 style: TextStyle(color: kTextSecondary.withOpacity(0.7), fontSize: 13),
               ),
-              const SizedBox(height: 52),
+              const SizedBox(height: 28),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFF8B0000)),
+                  SizedBox(width: 5),
+                  Text(
+                    'Non-English speakers will be banned',
+                    style: TextStyle(
+                      color: Color(0xFF8B0000),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
               OutlinedButton.icon(
                 onPressed: _cancelling ? null : _cancel,
                 icon: const Icon(Icons.close, color: kDanger, size: 18),

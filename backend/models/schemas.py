@@ -39,3 +39,9 @@ class MatchEvent(BaseModel):
 class CallEndEvent(BaseModel):
     channel_name: str
     reason: str
+
+
+class CallRateEvent(BaseModel):
+    channel_name: str
+    rated_user_id: str
+    stars: int

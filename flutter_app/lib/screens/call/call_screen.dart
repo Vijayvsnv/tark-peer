@@ -14,6 +14,7 @@ import '../../services/auth_service.dart';
 import '../../services/call_audio_manager.dart';
 import '../../services/call_service.dart';
 import '../../services/friend_service.dart';
+import '../../services/rating_service.dart';
 import '../../widgets/user_avatar.dart';
 
 // Agora AudioRoute int constants
@@ -34,6 +35,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   final _callService = CallService();
   final _audioManager = CallAudioManager();
   final _friendService = FriendService();
+  final _ratingService = RatingService();
   final _auth = AuthService();
 
   int _elapsed = 0;
@@ -265,7 +267,97 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     }
 
     await _callService.leaveCall();
+    if (!mounted) return;
+
+    // Ask user to rate the partner — only if the call actually happened
+    // (>= 5 seconds) and we have a partner id to attribute the rating to.
+    if (_elapsed >= 5 && widget.event.partnerId.isNotEmpty) {
+      await _showRatingDialog();
+    }
     if (mounted) context.go('/home');
+  }
+
+  Future<void> _showRatingDialog() async {
+    int selected = 0;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black87,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: kCallBgBottom,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Rate your call with',
+                style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 14),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                widget.event.partner.name,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (i) {
+                  final idx = i + 1;
+                  final filled = idx <= selected;
+                  return IconButton(
+                    onPressed: () => setDialogState(() => selected = idx),
+                    icon: Icon(
+                      filled ? Icons.star_rounded : Icons.star_border_rounded,
+                      color: filled ? const Color(0xFFFFC933) : Colors.white70,
+                      size: 38,
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogCtx),
+                    child: const Text(
+                      'Skip',
+                      style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  ElevatedButton(
+                    onPressed: selected == 0
+                        ? null
+                        : () async {
+                            Navigator.pop(dialogCtx);
+                            await _ratingService.rate(
+                              channelName: widget.event.channelName,
+                              ratedUserId: widget.event.partnerId,
+                              stars: selected,
+                            );
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kCyan,
+                      disabledBackgroundColor: kCyan.withOpacity(0.35),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    ),
+                    child: const Text('Submit', style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // Called by CallAudioManager when a phone call starts/ends.
