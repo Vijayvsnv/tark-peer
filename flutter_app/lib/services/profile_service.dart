@@ -11,11 +11,25 @@ class ProfileService {
     return UserProfile.fromJson(resp);
   }
 
+  Future<UserProfile?> getProfileById(String userId) async {
+    try {
+      final resp = await _client.from('profiles').select().eq('id', userId).single();
+      return UserProfile.fromJson(resp);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<UserProfile?> updateProfile({
     String? name,
     int? age,
     String? gender,
     String? bio,
+    String? occupation,
+    String? sector,
+    String? country,
+    String? state,
+    String? motherTongue,
   }) async {
     final user = _client.auth.currentUser;
     if (user == null) return null;
@@ -24,6 +38,11 @@ class ProfileService {
       if (age != null) 'age': age,
       if (gender != null) 'gender': gender,
       if (bio != null) 'bio': bio,
+      if (occupation != null) 'occupation': occupation,
+      if (sector != null) 'sector': sector,
+      if (country != null) 'country': country,
+      if (state != null) 'state': state,
+      if (motherTongue != null) 'mother_tongue': motherTongue,
       'updated_at': DateTime.now().toIso8601String(),
     };
     final resp = await _client
@@ -62,7 +81,7 @@ class ProfileService {
     if (partnerIds.isNotEmpty) {
       final profiles = await _client
           .from('profiles')
-          .select('id,name,age,gender,avatar_url,bio')
+          .select('id,name,age,gender,avatar_url,bio,occupation,sector,country,state')
           .inFilter('id', partnerIds.toList());
       for (final p in List<Map<String, dynamic>>.from(profiles)) {
         profileMap[p['id'] as String] = p;

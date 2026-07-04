@@ -100,7 +100,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (!mounted) return;
     showModalBottomSheet(
       context: context,
-      backgroundColor: kSurface,
+      backgroundColor: Colors.white,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -122,10 +122,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       backgroundColor: kBackground,
       appBar: AppBar(
         backgroundColor: kBackground,
+        toolbarHeight: 72,
         leading: Stack(
           children: [
             IconButton(
-              icon: const Icon(Icons.notifications_outlined, color: kTextSecondary),
+              icon: const Icon(Icons.notifications_outlined, color: kTextPrimary),
               onPressed: _showNotifications,
             ),
             if (_pendingCount > 0)
@@ -146,9 +147,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
           ],
         ),
-        title: const Text(
-          'Tark Peer',
-          style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold, fontSize: 20),
+        title: Image.asset(
+          'assets/Tark-pear-logo-change.png',
+          height: 175,
+          fit: BoxFit.contain,
         ),
         centerTitle: true,
         actions: [
@@ -173,18 +175,26 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           const ProgressTab(),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentTab,
-        onTap: (i) => setState(() => _currentTab = i),
-        backgroundColor: kSurface,
-        selectedItemColor: kPrimary,
-        unselectedItemColor: kTextSecondary,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.book_outlined), label: 'Learn'),
-          BottomNavigationBarItem(icon: Icon(Icons.mic_outlined), label: 'Practice'),
-          BottomNavigationBarItem(icon: Icon(Icons.bar_chart_outlined), label: 'Progress'),
-        ],
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          color: kBackground,
+          border: Border(top: BorderSide(color: kBorder, width: 1)),
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentTab,
+          onTap: (i) => setState(() => _currentTab = i),
+          backgroundColor: kBackground,
+          selectedItemColor: kPrimary,
+          unselectedItemColor: kTextMuted,
+          type: BottomNavigationBarType.fixed,
+          elevation: 0,
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.book_outlined), label: 'Learn'),
+            BottomNavigationBarItem(icon: Icon(Icons.mic_outlined), label: 'Practice'),
+            BottomNavigationBarItem(icon: Icon(Icons.bar_chart_outlined), label: 'Progress'),
+          ],
+        ),
       ),
     );
   }
@@ -193,15 +203,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const SizedBox(height: 32),
+          const SizedBox(height: 28),
           const Text(
-            'Practice with Humans',
+            'PRACTICE WITH HUMANS',
             style: TextStyle(
-              color: kTextPrimary,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
+              color: kPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
             ),
           ),
           const SizedBox(height: 6),
@@ -218,7 +229,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   builder: (_, child) => Transform.scale(scale: _pulse.value, child: child),
                   child: _FindPartnerButton(onTap: () => context.go('/matching')),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
                 const Text(
                   'Tap to find a random partner',
                   style: TextStyle(color: kTextSecondary, fontSize: 14),
@@ -229,11 +240,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   child: _waiting > 0
                       ? Container(
                           key: ValueKey(_waiting),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                           decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.12),
+                            color: kSuccess.withOpacity(0.12),
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.green.withOpacity(0.35)),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -241,14 +251,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               Container(
                                 width: 8, height: 8,
                                 decoration: const BoxDecoration(
-                                  color: Colors.greenAccent,
+                                  color: kSuccess,
                                   shape: BoxShape.circle,
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Text(
                                 '$_waiting ${_waiting == 1 ? 'person' : 'people'} waiting right now',
-                                style: const TextStyle(color: Colors.greenAccent, fontSize: 13, fontWeight: FontWeight.w500),
+                                style: const TextStyle(color: kSuccess, fontSize: 13, fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
@@ -269,7 +279,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: kPrimary.withOpacity(0.4), size: 64),
+          Icon(icon, color: kTextMuted, size: 64),
           const SizedBox(height: 16),
           Text(title, style: const TextStyle(color: kTextPrimary, fontSize: 24, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
@@ -289,22 +299,33 @@ class _FindPartnerButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 160,
-        height: 160,
+        width: 180,
+        height: 180,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: const RadialGradient(colors: [Color(0xFF9F67FF), kPrimary]),
-          boxShadow: [BoxShadow(color: kPrimary.withOpacity(0.5), blurRadius: 30, spreadRadius: 10)],
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [kAccentSoft, kAccent],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: kAccent.withOpacity(0.35),
+              blurRadius: 32,
+              spreadRadius: 4,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         child: const Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.phone, color: Colors.white, size: 48),
+            Icon(Icons.phone, color: Colors.white, size: 52),
             SizedBox(height: 8),
             Text(
-              'Find\nPartner',
+              'Tark Here',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -333,28 +354,28 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: const Color(0xFF1A0B2E),
+      backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       title: const Row(
         children: [
-          Icon(Icons.system_update, color: kPrimary, size: 22),
+          Icon(Icons.system_update, color: kAccent, size: 22),
           SizedBox(width: 10),
-          Text('Update Available', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text('Update Available', style: TextStyle(color: kTextPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
         ],
       ),
       content: Text(
         'Version ${widget.version} available.\nBrowser mein download hoga, phir install karo.',
-        style: const TextStyle(color: Color(0xFFB8B0CC), fontSize: 14),
+        style: const TextStyle(color: kTextSecondary, fontSize: 14),
       ),
       actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Later', style: TextStyle(color: Color(0xFFB8B0CC))),
+                child: const Text('Later', style: TextStyle(color: kTextSecondary)),
               ),
               ElevatedButton(
                 onPressed: _update,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimary,
+                  backgroundColor: kAccent,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
                 child: const Text('Update Now'),

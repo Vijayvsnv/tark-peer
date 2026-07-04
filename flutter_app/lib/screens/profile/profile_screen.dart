@@ -41,10 +41,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         backgroundColor: kBackground,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: kTextSecondary),
+          icon: const Icon(Icons.arrow_back, color: kTextPrimary),
           onPressed: () => context.go('/home'),
         ),
-        title: const Text('Profile', style: TextStyle(color: kTextPrimary)),
+        title: const Text(
+          'Profile',
+          style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.w700),
+        ),
+        centerTitle: true,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kPrimary))
@@ -81,14 +85,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ].join(' • '),
                       style: const TextStyle(color: kTextSecondary, fontSize: 13),
                     ),
+                  if (_profile?.state != null || _profile?.country != null) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.location_on_outlined,
+                            color: kTextSecondary, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          [
+                            if (_profile?.state != null) _profile!.state!,
+                            if (_profile?.country != null) _profile!.country!,
+                          ].join(', '),
+                          style: const TextStyle(color: kTextSecondary, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if ((_profile?.occupation != null && _profile!.occupation!.trim().isNotEmpty)
+                      || _profile?.sector != null) ...[
+                    const SizedBox(height: 4),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        [
+                          if (_profile?.occupation != null && _profile!.occupation!.trim().isNotEmpty)
+                            _profile!.occupation!,
+                          if (_profile?.sector != null) _profile!.sector!,
+                        ].join(' · '),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: kTextSecondary, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                  if (_profile?.motherTongue != null) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.translate_outlined,
+                            color: kTextSecondary, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          _profile!.motherTongue!,
+                          style: const TextStyle(color: kTextSecondary, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   OutlinedButton.icon(
                     onPressed: () => context.go('/setup'),
                     icon: const Icon(Icons.edit, size: 16, color: kPrimary),
-                    label: const Text('Edit Profile', style: TextStyle(color: kPrimary)),
+                    label: const Text('Edit Profile', style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600)),
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: kPrimary),
+                      side: const BorderSide(color: kPrimary, width: 1.5),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -117,11 +171,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         await _auth.signOut();
                         if (mounted) context.go('/login');
                       },
-                      icon: const Icon(Icons.logout, color: Colors.red),
-                      label: const Text('Logout', style: TextStyle(color: Colors.red)),
+                      icon: const Icon(Icons.logout, color: kDanger),
+                      label: const Text('Logout', style: TextStyle(color: kDanger, fontWeight: FontWeight.w600)),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.red),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        side: const BorderSide(color: kDanger, width: 1.5),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                     ),
@@ -142,17 +196,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         decoration: BoxDecoration(
-          color: kSurface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: kPrimary.withOpacity(0.3)),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: kBorder),
+          boxShadow: [
+            BoxShadow(
+              color: kPrimaryDeep.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Column(
           children: [
-            Icon(icon, color: kPrimary, size: 20),
-            const SizedBox(width: 8),
+            Container(
+              width: 44,
+              height: 44,
+              decoration: const BoxDecoration(color: kPrimary, shape: BoxShape.circle),
+              child: Icon(icon, color: Colors.white, size: 22),
+            ),
+            const SizedBox(height: 10),
             Text(label, style: const TextStyle(color: kTextPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
           ],
         ),

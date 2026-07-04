@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
@@ -48,7 +49,15 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 60),
+                const SizedBox(height: 40),
+                Center(
+                  child: SvgPicture.asset(
+                    'assets/logos/icon.svg',
+                    width: 72,
+                    height: 72,
+                  ),
+                ),
+                const SizedBox(height: 20),
                 const Text(
                   'Welcome back',
                   style: TextStyle(color: kTextPrimary, fontSize: 32, fontWeight: FontWeight.bold),

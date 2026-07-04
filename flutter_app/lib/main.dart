@@ -14,6 +14,7 @@ import 'screens/matching/matching_screen.dart';
 import 'screens/call/call_screen.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/profile/friends_screen.dart';
+import 'screens/profile/friend_profile_screen.dart';
 import 'screens/profile/call_history_screen.dart';
 
 Future<void> main() async {
@@ -38,6 +39,10 @@ final _router = GoRouter(
     GoRoute(path: '/home', builder: (_, __) => const HomeScreen()),
     GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
     GoRoute(path: '/friends', builder: (_, __) => const FriendsScreen()),
+    GoRoute(
+      path: '/friend/:id',
+      builder: (_, state) => FriendProfileScreen(userId: state.pathParameters['id']!),
+    ),
     GoRoute(path: '/calls', builder: (_, __) => const CallHistoryScreen()),
     GoRoute(path: '/matching', builder: (_, __) => const MatchingScreen()),
     GoRoute(

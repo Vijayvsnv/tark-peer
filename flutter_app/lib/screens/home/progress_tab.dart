@@ -56,10 +56,15 @@ class _ProgressTabState extends State<ProgressTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Your Progress',
-              style: TextStyle(color: kTextPrimary, fontSize: 24, fontWeight: FontWeight.bold),
+              'YOUR PROGRESS',
+              style: TextStyle(
+                color: kPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+              ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             const Text(
               'See how far you\'ve come',
               style: TextStyle(color: kTextSecondary, fontSize: 14),
@@ -94,7 +99,7 @@ class _ProgressTabState extends State<ProgressTab> {
           padding: const EdgeInsets.only(top: 60),
           child: Column(
             children: [
-              Icon(Icons.bar_chart_outlined, color: kPrimary.withOpacity(0.3), size: 64),
+              Icon(Icons.bar_chart_outlined, color: kTextMuted, size: 64),
               const SizedBox(height: 16),
               const Text(
                 'No calls yet',
@@ -125,11 +130,11 @@ class _ProgressTabState extends State<ProgressTab> {
                   label: 'Total Calls',
                 ),
               ),
-              Container(width: 1, height: 56, color: Colors.white12),
+              Container(width: 1, height: 56, color: kBorder),
               Expanded(
                 child: _statBlock(
                   icon: Icons.timer_outlined,
-                  iconColor: const Color(0xFF60A5FA),
+                  iconColor: kCyan,
                   value: _formatTotal(totalSeconds),
                   label: 'Total Time',
                 ),
@@ -145,14 +150,18 @@ class _ProgressTabState extends State<ProgressTab> {
           child: Row(
             children: [
               Container(
-                width: 48,
-                height: 48,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
+                  gradient: const LinearGradient(
+                    colors: [kAccentSoft, kAccent],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Center(
-                  child: Text('🔥', style: TextStyle(fontSize: 24)),
+                  child: Text('🔥', style: TextStyle(fontSize: 26)),
                 ),
               ),
               const SizedBox(width: 16),
@@ -163,8 +172,8 @@ class _ProgressTabState extends State<ProgressTab> {
                     Text(
                       streak == 0 ? 'No streak yet' : '$streak day${streak == 1 ? '' : 's'} streak',
                       style: TextStyle(
-                        color: streak > 0 ? Colors.orange : kTextSecondary,
-                        fontSize: 18,
+                        color: streak > 0 ? kAccent : kTextSecondary,
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -189,14 +198,14 @@ class _ProgressTabState extends State<ProgressTab> {
           child: Row(
             children: [
               Container(
-                width: 48,
-                height: 48,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
+                  color: kSuccess.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Center(
-                  child: Icon(Icons.emoji_events_outlined, color: Colors.greenAccent, size: 26),
+                  child: Icon(Icons.emoji_events_outlined, color: kSuccess, size: 26),
                 ),
               ),
               const SizedBox(width: 16),
@@ -206,7 +215,7 @@ class _ProgressTabState extends State<ProgressTab> {
                   children: [
                     Text(
                       _formatLongest(longestSeconds),
-                      style: const TextStyle(color: Colors.greenAccent, fontSize: 22, fontWeight: FontWeight.bold),
+                      style: const TextStyle(color: kSuccess, fontSize: 22, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 2),
                     const Text(
@@ -250,9 +259,9 @@ class _ProgressTabState extends State<ProgressTab> {
                           ? '↓ ${lastWeek - thisWeek} fewer than last week'
                           : 'Same as last week',
                   style: TextStyle(
-                    color: thisWeek >= lastWeek ? Colors.greenAccent : const Color(0xFFFF6B6B),
+                    color: thisWeek >= lastWeek ? kSuccess : kDanger,
                     fontSize: 12,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
@@ -268,9 +277,16 @@ class _ProgressTabState extends State<ProgressTab> {
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: kSurface,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kPrimary.withOpacity(0.15)),
+        border: Border.all(color: kBorder),
+        boxShadow: [
+          BoxShadow(
+            color: kPrimaryDeep.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: child,
     );
@@ -312,24 +328,15 @@ class _ProgressTabState extends State<ProgressTab> {
     return Row(
       children: [
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 600),
-                height: 8,
-                decoration: BoxDecoration(
-                  color: kPrimary,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                width: double.infinity,
-                constraints: BoxConstraints(
-                  maxWidth: double.infinity,
-                ),
-              ),
-            ],
-          ),
           flex: thisWeek == 0 ? 1 : thisWeek,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 600),
+            height: 8,
+            decoration: BoxDecoration(
+              color: kPrimary,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
         ),
         const SizedBox(width: 4),
         Expanded(
@@ -337,7 +344,7 @@ class _ProgressTabState extends State<ProgressTab> {
           child: Container(
             height: 8,
             decoration: BoxDecoration(
-              color: kTextSecondary.withOpacity(0.3),
+              color: kBorder,
               borderRadius: BorderRadius.circular(4),
             ),
           ),

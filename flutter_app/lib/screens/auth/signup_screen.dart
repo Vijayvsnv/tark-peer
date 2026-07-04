@@ -1,4 +1,6 @@
+import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
@@ -22,16 +24,19 @@ class _SignupScreenState extends State<SignupScreen> {
 
   Future<void> _signup() async {
     if (!_formKey.currentState!.validate()) return;
+    developer.log('signup attempt: email=${_emailCtrl.text.trim()}', name: 'auth');
     setState(() => _loading = true);
     try {
-      await _auth.signUp(
+      final resp = await _auth.signUp(
         email: _emailCtrl.text.trim(),
         password: _passCtrl.text,
         name: _nameCtrl.text.trim(),
       );
+      developer.log('signup success: user=${resp.user?.id} session=${resp.session != null}', name: 'auth');
       if (!mounted) return;
       context.go('/setup');
-    } catch (e) {
+    } catch (e, st) {
+      developer.log('signup FAILED', name: 'auth', error: e, stackTrace: st);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
@@ -53,7 +58,15 @@ class _SignupScreenState extends State<SignupScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 60),
+                const SizedBox(height: 40),
+                Center(
+                  child: SvgPicture.asset(
+                    'assets/logos/icon.svg',
+                    width: 72,
+                    height: 72,
+                  ),
+                ),
+                const SizedBox(height: 20),
                 const Text(
                   'Create account',
                   style: TextStyle(color: kTextPrimary, fontSize: 32, fontWeight: FontWeight.bold),

@@ -49,25 +49,12 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: kPrimary,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(Icons.mic, color: Colors.white, size: 40),
+            Image.asset(
+              'assets/Tark-pear-logo-change.png',
+              width: 340,
+              fit: BoxFit.contain,
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'Tark Peer',
-              style: TextStyle(
-                color: kTextPrimary,
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             const Text(
               'Random voice conversations',
               style: TextStyle(color: kTextSecondary, fontSize: 14),

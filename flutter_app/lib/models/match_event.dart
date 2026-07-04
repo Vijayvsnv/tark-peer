@@ -4,6 +4,11 @@ class PartnerInfo {
   final String? gender;
   final String? avatarUrl;
   final String? bio;
+  final String? occupation;
+  final String? sector;
+  final String? country;
+  final String? state;
+  final String? motherTongue;
 
   const PartnerInfo({
     required this.name,
@@ -11,6 +16,11 @@ class PartnerInfo {
     this.gender,
     this.avatarUrl,
     this.bio,
+    this.occupation,
+    this.sector,
+    this.country,
+    this.state,
+    this.motherTongue,
   });
 
   factory PartnerInfo.fromJson(Map<String, dynamic> json) => PartnerInfo(
@@ -19,6 +29,11 @@ class PartnerInfo {
         gender: json['gender'] as String?,
         avatarUrl: json['avatar_url'] as String?,
         bio: json['bio'] as String?,
+        occupation: json['occupation'] as String?,
+        sector: json['sector'] as String?,
+        country: json['country'] as String?,
+        state: json['state'] as String?,
+        motherTongue: json['mother_tongue'] as String?,
       );
 }
 

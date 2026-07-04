@@ -5,6 +5,11 @@ class UserProfile {
   final String? gender;
   final String? bio;
   final String? avatarUrl;
+  final String? occupation;
+  final String? sector;
+  final String? country;
+  final String? state;
+  final String? motherTongue;
   final bool isPremium;
   final int totalCalls;
 
@@ -15,6 +20,11 @@ class UserProfile {
     this.gender,
     this.bio,
     this.avatarUrl,
+    this.occupation,
+    this.sector,
+    this.country,
+    this.state,
+    this.motherTongue,
     this.isPremium = false,
     this.totalCalls = 0,
   });
@@ -26,6 +36,11 @@ class UserProfile {
         gender: json['gender'] as String?,
         bio: json['bio'] as String?,
         avatarUrl: json['avatar_url'] as String?,
+        occupation: json['occupation'] as String?,
+        sector: json['sector'] as String?,
+        country: json['country'] as String?,
+        state: json['state'] as String?,
+        motherTongue: json['mother_tongue'] as String?,
         isPremium: (json['is_premium'] as bool?) ?? false,
         totalCalls: (json['total_calls'] as int?) ?? 0,
       );
@@ -37,9 +52,15 @@ class UserProfile {
         if (gender != null) 'gender': gender,
         if (bio != null) 'bio': bio,
         if (avatarUrl != null) 'avatar_url': avatarUrl,
+        if (occupation != null) 'occupation': occupation,
+        if (sector != null) 'sector': sector,
+        if (country != null) 'country': country,
+        if (state != null) 'state': state,
+        if (motherTongue != null) 'mother_tongue': motherTongue,
         'is_premium': isPremium,
         'total_calls': totalCalls,
       };
 
-  bool get isProfileComplete => age != null && gender != null;
+  bool get isProfileComplete =>
+      age != null && gender != null && country != null && state != null;
 }

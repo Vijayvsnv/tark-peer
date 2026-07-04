@@ -79,7 +79,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
   void _showPartnerProfile(String partnerId, Map<String, dynamic>? profile) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1A1A2E),
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -87,6 +87,10 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
         partnerId: partnerId,
         name: profile?['name'] as String? ?? 'User',
         bio: profile?['bio'] as String?,
+        occupation: profile?['occupation'] as String?,
+        sector: profile?['sector'] as String?,
+        country: profile?['country'] as String?,
+        state: profile?['state'] as String?,
         friendService: _friendService,
       ),
     );
@@ -99,10 +103,11 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
       appBar: AppBar(
         backgroundColor: kBackground,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: kTextSecondary),
+          icon: const Icon(Icons.arrow_back, color: kTextPrimary),
           onPressed: () => context.pop(),
         ),
-        title: const Text('Recent Calls', style: TextStyle(color: kTextPrimary)),
+        title: const Text('Recent Calls', style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.w700)),
+        centerTitle: true,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kPrimary))
@@ -114,9 +119,9 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                   ),
                 )
               : ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                   itemCount: _calls.length,
-                  separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (_, i) {
                     final call = _calls[i];
                     final name = _getPartnerName(call);
@@ -124,31 +129,52 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                     final profile = _getPartnerProfile(call);
                     final duration = _formatDuration(call['duration_seconds'] as int?);
                     final date = _formatDate(call['started_at'] as String?);
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                    return InkWell(
                       onTap: partnerId != null
                           ? () => _showPartnerProfile(partnerId, profile)
                           : null,
-                      leading: CircleAvatar(
-                        backgroundColor: kPrimary.withOpacity(0.2),
-                        child: Text(
-                          name.isNotEmpty ? name[0].toUpperCase() : '?',
-                          style: const TextStyle(color: kPrimary, fontWeight: FontWeight.bold),
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: kSurface,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: kPrimaryLight,
+                              radius: 22,
+                              child: Text(
+                                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                style: const TextStyle(color: kPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(name, style: const TextStyle(color: kTextPrimary, fontSize: 15, fontWeight: FontWeight.w600)),
+                                  const SizedBox(height: 3),
+                                  Row(
+                                    children: [
+                                      if (date.isNotEmpty) ...[
+                                        Text(date, style: const TextStyle(color: kTextSecondary, fontSize: 12)),
+                                        const SizedBox(width: 6),
+                                        const Text('•', style: TextStyle(color: kTextMuted, fontSize: 12)),
+                                        const SizedBox(width: 6),
+                                      ],
+                                      Text(duration, style: const TextStyle(color: kTextSecondary, fontSize: 12)),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right, color: kTextMuted, size: 20),
+                          ],
                         ),
                       ),
-                      title: Text(name, style: const TextStyle(color: kTextPrimary, fontSize: 15)),
-                      subtitle: Row(
-                        children: [
-                          const Icon(Icons.timer_outlined, size: 12, color: kTextSecondary),
-                          const SizedBox(width: 4),
-                          Text(duration, style: const TextStyle(color: kTextSecondary, fontSize: 12)),
-                          if (date.isNotEmpty) ...[
-                            const SizedBox(width: 10),
-                            Text(date, style: const TextStyle(color: kTextSecondary, fontSize: 12)),
-                          ],
-                        ],
-                      ),
-                      trailing: const Icon(Icons.chevron_right, color: kTextSecondary, size: 18),
                     );
                   },
                 ),

@@ -114,7 +114,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                     Text('Partner joined!'),
                   ],
                 ),
-                backgroundColor: Colors.green.shade700,
+                backgroundColor: kSuccess,
                 duration: const Duration(seconds: 2),
               ),
             );
@@ -197,7 +197,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       context: context,
       barrierColor: Colors.black54,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF2D1B4E),
+        backgroundColor: kCallBgBottom,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: const Text(
           'End Call?',
@@ -205,18 +205,19 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
         ),
         content: const Text(
           'Are you sure you want to end this call?',
-          style: TextStyle(color: Color(0xFFB8B0CC)),
+          style: TextStyle(color: Color(0xFF94A3B8)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Stay', style: TextStyle(color: Color(0xFF7C3AED))),
+            child: const Text('Stay', style: TextStyle(color: kCyan, fontWeight: FontWeight.w600)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
+              backgroundColor: kDanger,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
             ),
             child: const Text('End Call'),
           ),
@@ -288,7 +289,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       SnackBar(
         content: Text(next ? 'Mic unmuted' : 'Mic muted'),
         duration: const Duration(seconds: 1),
-        backgroundColor: const Color(0xFF2D1B4E),
+        backgroundColor: kCallBgBottom,
       ),
     );
   }
@@ -302,7 +303,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       SnackBar(
         content: Text(next ? 'Speaker on' : 'Speaker off'),
         duration: const Duration(seconds: 1),
-        backgroundColor: const Color(0xFF2D1B4E),
+        backgroundColor: kCallBgBottom,
       ),
     );
   }
@@ -353,7 +354,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF1A0B2E), Color(0xFF2D1B4E)],
+            colors: [kCallBgTop, kCallBgBottom],
           ),
         ),
         child: SafeArea(
@@ -373,14 +374,14 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
           FadeTransition(
             opacity: _fadeAnim,
             child: Container(
-              width: 88,
-              height: 88,
+              width: 92,
+              height: 92,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: kPrimary.withOpacity(0.25),
-                border: Border.all(color: kPrimary.withOpacity(0.5), width: 2),
+                color: kCyan.withOpacity(0.18),
+                border: Border.all(color: kCyan.withOpacity(0.6), width: 2),
               ),
-              child: const Icon(Icons.phone, color: Colors.white, size: 38),
+              child: const Icon(Icons.phone, color: Colors.white, size: 40),
             ),
           ),
           const SizedBox(height: 28),
@@ -391,7 +392,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
           const SizedBox(height: 8),
           const Text(
             'Setting up voice call',
-            style: TextStyle(color: Color(0xFFB8B0CC), fontSize: 14),
+            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
           ),
         ],
       ),
@@ -432,36 +433,36 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
-                width: _partnerSpeaking ? 136 : 124,
-                height: _partnerSpeaking ? 136 : 124,
+                width: _partnerSpeaking ? 140 : 126,
+                height: _partnerSpeaking ? 140 : 126,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: kPrimary.withOpacity(_partnerSpeaking ? 0.55 : 0.2),
-                      blurRadius: _partnerSpeaking ? 28 : 12,
-                      spreadRadius: _partnerSpeaking ? 5 : 2,
+                      color: kCyan.withOpacity(_partnerSpeaking ? 0.6 : 0.18),
+                      blurRadius: _partnerSpeaking ? 32 : 14,
+                      spreadRadius: _partnerSpeaking ? 6 : 2,
                     ),
                   ],
                 ),
               ),
               Container(
-                width: 118,
-                height: 118,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: kPrimary),
+                width: 120,
+                height: 120,
+                decoration: const BoxDecoration(shape: BoxShape.circle, color: kCyan),
               ),
               Container(
-                width: 110,
-                height: 110,
+                width: 112,
+                height: 112,
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Color(0xFF1A0B2E),
+                  color: kCallBgTop,
                 ),
                 child: ClipOval(
                   child: UserAvatar(
                     name: partner.name,
                     imageUrl: partner.avatarUrl,
-                    radius: 55,
+                    radius: 56,
                   ),
                 ),
               ),
@@ -490,6 +491,45 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
               if (partner.gender != null) partner.gender!,
             ].join(' · '),
             style: const TextStyle(color: Color(0xFFB8B0CC), fontSize: 13),
+          ),
+        ],
+
+        // ── Location (state, country) ─────────────────────────────────────────
+        if (partner.state != null || partner.country != null) ...[
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.location_on_outlined,
+                  color: Color(0xFFB8B0CC), size: 13),
+              const SizedBox(width: 4),
+              Text(
+                [
+                  if (partner.state != null) partner.state!,
+                  if (partner.country != null) partner.country!,
+                ].join(', '),
+                style: const TextStyle(color: Color(0xFFB8B0CC), fontSize: 13),
+              ),
+            ],
+          ),
+        ],
+
+        // ── Occupation / sector ───────────────────────────────────────────────
+        if (partner.occupation != null || partner.sector != null) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              [
+                if (partner.occupation != null && partner.occupation!.trim().isNotEmpty)
+                  partner.occupation!,
+                if (partner.sector != null) partner.sector!,
+              ].join(' · '),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xFFB8B0CC), fontSize: 13),
+            ),
           ),
         ],
 
@@ -529,14 +569,14 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                 icon: _micEnabled ? Icons.mic : Icons.mic_off,
                 label: _micEnabled ? 'Mic' : 'Muted',
                 active: !_micEnabled,
-                activeColor: const Color(0xFFEF4444),
+                activeColor: kDanger,
                 onTap: _toggleMic,
               ),
               _ControlBtn(
                 icon: _speakerEnabled ? Icons.volume_up_rounded : Icons.volume_down_rounded,
                 label: 'Speaker',
                 active: _speakerEnabled,
-                activeColor: kPrimary,
+                activeColor: kCyan,
                 onTap: _toggleSpeaker,
               ),
               // Earbuds — auto-detected, no manual tap
@@ -544,7 +584,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                 icon: _headphonesConnected ? Icons.headphones : Icons.headset_off,
                 label: _earbdsLabel,
                 active: _headphonesConnected,
-                activeColor: kPrimary,
+                activeColor: kCyan,
                 onTap: null,
               ),
             ],
@@ -587,26 +627,39 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
 
   Widget _buildFriendRow() {
     if (_friendStatus == null) {
-      return TextButton.icon(
+      return ElevatedButton.icon(
         onPressed: _addFriend,
-        icon: const Icon(Icons.person_add_outlined, color: kPrimary, size: 18),
-        label: const Text('Add Friend', style: TextStyle(color: kPrimary, fontSize: 14)),
+        icon: const Icon(Icons.person_add_outlined, color: Colors.white, size: 18),
+        label: const Text('Add Friend', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: kAccent,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        ),
       );
     }
     if (_friendStatus == 'pending') {
       return const Text(
         'Request Sent',
-        style: TextStyle(color: Colors.white38, fontSize: 13),
+        style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w500),
       );
     }
     if (_friendStatus == 'accepted') {
-      return const Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.people, color: Colors.greenAccent, size: 16),
-          SizedBox(width: 5),
-          Text('Friends', style: TextStyle(color: Colors.greenAccent, fontSize: 13)),
-        ],
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: kSuccess.withOpacity(0.18),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.people, color: kSuccess, size: 16),
+            SizedBox(width: 6),
+            Text('Friends', style: TextStyle(color: kSuccess, fontSize: 13, fontWeight: FontWeight.w600)),
+          ],
+        ),
       );
     }
     return const SizedBox.shrink();
