@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../models/match_event.dart';
+import '../../models/match_filter.dart';
 import '../../services/auth_service.dart';
 import '../../services/match_service.dart';
 
 class MatchingScreen extends StatefulWidget {
-  const MatchingScreen({super.key});
+  final MatchFilter? filter;
+  const MatchingScreen({super.key, this.filter});
 
   @override
   State<MatchingScreen> createState() => _MatchingScreenState();
@@ -55,7 +57,7 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
     }
     debugPrint('[MatchingScreen] Calling MatchService.connect()...');
     try {
-      await _matchService.connect(token);
+      await _matchService.connect(token, filter: widget.filter);
       debugPrint('[MatchingScreen] connect() returned — setting up listener');
       _sub = _matchService.events.listen(_onEvent);
     } catch (e, st) {
@@ -170,6 +172,24 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
                 ),
               ),
               const SizedBox(height: 32),
+              if (widget.filter != null && widget.filter!.hasAnyFilter) ...[
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    if (widget.filter!.gender != null)
+                      _FilterChip(widget.filter!.gender!),
+                    if (widget.filter!.ageRange != null)
+                      _FilterChip(widget.filter!.ageRange!),
+                    if (widget.filter!.minRating != null || widget.filter!.maxRating != null)
+                      _FilterChip(
+                        '${widget.filter!.minRating?.toStringAsFixed(0) ?? 'Any'}★'
+                        ' – '
+                        '${widget.filter!.maxRating?.toStringAsFixed(0) ?? 'Any'}★',
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
               const Text(
                 'Finding a partner...',
                 style: TextStyle(color: kTextPrimary, fontSize: 22, fontWeight: FontWeight.bold),
@@ -222,6 +242,24 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
           ),
         ),
       ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  final String label;
+  const _FilterChip(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: kPrimaryLight,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: kPrimary.withOpacity(0.3)),
+      ),
+      child: Text(label, style: const TextStyle(color: kPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
     );
   }
 }

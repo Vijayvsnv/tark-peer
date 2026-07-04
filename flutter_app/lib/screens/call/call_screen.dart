@@ -231,7 +231,11 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
 
   bool _ended = false;
 
-  Future<void> _endCall({String reason = 'manual'}) async {
+  Future<void> _endCall({
+    String reason = 'manual',
+    String navigateTo = '/home',
+    bool askRating = true,
+  }) async {
     if (_ended) return;
     _ended = true;
     _timer?.cancel();
@@ -271,10 +275,16 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
 
     // Ask user to rate the partner — only if the call actually happened
     // (>= 5 seconds) and we have a partner id to attribute the rating to.
-    if (_elapsed >= 5 && widget.event.partnerId.isNotEmpty) {
+    if (askRating && _elapsed >= 5 && widget.event.partnerId.isNotEmpty) {
       await _showRatingDialog();
     }
-    if (mounted) context.go('/home');
+    if (mounted) context.go(navigateTo);
+  }
+
+  void _skipCall() {
+    // End current call and jump straight into matching for a new partner.
+    // No rating prompt — skip should feel instant.
+    _endCall(reason: 'skip', navigateTo: '/matching', askRating: false);
   }
 
   Future<void> _showRatingDialog() async {
@@ -685,31 +695,28 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
 
         const SizedBox(height: 30),
 
-        // ── End call button ───────────────────────────────────────────────────
-        Column(
-          children: [
-            GestureDetector(
-              onTap: _confirmEndCall,
-              child: Container(
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFFEF4444),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.45),
-                      blurRadius: 22,
-                      spreadRadius: 4,
-                    ),
-                  ],
-                ),
-                child: const Icon(Icons.call_end, color: Colors.white, size: 30),
+        // ── End call + Skip buttons ───────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _EndActionBtn(
+                icon: Icons.call_end,
+                label: 'End',
+                bgColor: const Color(0xFFEF4444),
+                glowColor: Colors.red.withOpacity(0.45),
+                onTap: _confirmEndCall,
               ),
-            ),
-            const SizedBox(height: 8),
-            const Text('End Call', style: TextStyle(color: Colors.white54, fontSize: 12)),
-          ],
+              _EndActionBtn(
+                icon: Icons.skip_next_rounded,
+                label: 'Next',
+                bgColor: kCyan,
+                glowColor: kCyan.withOpacity(0.45),
+                onTap: _skipCall,
+              ),
+            ],
+          ),
         ),
 
         const SizedBox(height: 30),
@@ -806,6 +813,48 @@ class _ControlBtn extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _EndActionBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color bgColor;
+  final Color glowColor;
+  final VoidCallback onTap;
+
+  const _EndActionBtn({
+    required this.icon,
+    required this.label,
+    required this.bgColor,
+    required this.glowColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            width: 66,
+            height: 66,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: bgColor,
+              boxShadow: [
+                BoxShadow(color: glowColor, blurRadius: 18, spreadRadius: 3),
+              ],
+            ),
+            child: Icon(icon, color: Colors.white, size: 30),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+      ],
     );
   }
 }

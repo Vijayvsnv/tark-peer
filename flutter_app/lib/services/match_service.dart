@@ -20,6 +20,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../core/constants.dart';
+import '../models/match_filter.dart';
 
 enum MatchState { idle, waiting, matched, ended }
 
@@ -50,7 +51,7 @@ class MatchService {
 
   /// Subscribe to the user channel, then open the matching WebSocket.
   /// Returns once both legs are ready (or throws).
-  Future<void> connect(String token) async {
+  Future<void> connect(String token, {MatchFilter? filter}) async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
       throw StateError('connect() called without a signed-in Supabase user');
@@ -62,7 +63,11 @@ class MatchService {
     await _subscribeUserChannel(user.id);
 
     // ── 2. Open the presence WebSocket ──
-    final uri = Uri.parse('$kWsUrl?token=$token');
+    final params = <String, String>{'token': token};
+    if (filter != null) {
+      filter.toQuery().forEach((k, v) => params[k] = v.toString());
+    }
+    final uri = Uri.parse(kWsUrl).replace(queryParameters: params);
     debugPrint('[MatchService] WS connecting: $uri');
     _ws = WebSocketChannel.connect(uri);
     await _ws!.ready;

@@ -11,6 +11,7 @@ import '../../services/friend_service.dart';
 import '../../services/profile_service.dart';
 import '../../services/presence_service.dart';
 import '../../services/update_service.dart';
+import '../../widgets/filter_bottom_sheet.dart';
 import '../../widgets/user_avatar.dart';
 import 'progress_tab.dart';
 
@@ -238,7 +239,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 AnimatedBuilder(
                   animation: _pulse,
                   builder: (_, child) => Transform.scale(scale: _pulse.value, child: child),
-                  child: _FindPartnerButton(onTap: () => context.go('/matching')),
+                  child: _FindPartnerButton(onTap: () async {
+                    final filter = await showFilterSheet(context);
+                    if (filter != null && context.mounted) {
+                      context.go('/matching', extra: filter);
+                    }
+                  }),
                 ),
                 const SizedBox(height: 24),
                 const Text(

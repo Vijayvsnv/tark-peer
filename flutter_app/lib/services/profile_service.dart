@@ -1,25 +1,8 @@
-import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_profile.dart';
 
 class ProfileService {
   final _client = Supabase.instance.client;
-
-  /// Uploads [file] to Supabase Storage `avatars` bucket at path
-  /// `{userId}/avatar.jpg`. Returns a public URL with a cache-buster
-  /// so a re-upload shows immediately on all clients. Throws on failure.
-  Future<String> uploadAvatar(File file) async {
-    final user = _client.auth.currentUser;
-    if (user == null) throw Exception('Not authenticated');
-    final path = '${user.id}/avatar.jpg';
-    await _client.storage.from('avatars').upload(
-          path,
-          file,
-          fileOptions: const FileOptions(upsert: true, contentType: 'image/jpeg'),
-        );
-    final publicUrl = _client.storage.from('avatars').getPublicUrl(path);
-    return '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
-  }
 
   Future<UserProfile?> getMyProfile() async {
     final user = _client.auth.currentUser;

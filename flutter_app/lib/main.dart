@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/theme.dart';
 import 'models/match_event.dart';
+import 'models/match_filter.dart';
 import 'screens/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/signup_screen.dart';
@@ -51,7 +52,10 @@ final _router = GoRouter(
       path: '/chat/:friendId',
       builder: (_, state) => ChatScreen(friendId: state.pathParameters['friendId']!),
     ),
-    GoRoute(path: '/matching', builder: (_, __) => const MatchingScreen()),
+    GoRoute(
+      path: '/matching',
+      builder: (_, state) => MatchingScreen(filter: state.extra as MatchFilter?),
+    ),
     GoRoute(
       path: '/call',
       builder: (context, state) {

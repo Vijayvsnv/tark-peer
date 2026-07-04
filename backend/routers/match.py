@@ -168,8 +168,78 @@ async def _send_ws(ws: WebSocket, data: dict) -> bool:
 _MATCH_POLL_INTERVAL_S = 1.0
 
 
+def _parse_filter(
+    gender: Optional[str],
+    age_range: Optional[str],
+    min_rating: Optional[float],
+    max_rating: Optional[float],
+) -> Optional[dict]:
+    f = {}
+    if gender:       f["gender"] = gender.lower()
+    if age_range:    f["age_range"] = age_range
+    if min_rating is not None: f["min_rating"] = min_rating
+    if max_rating is not None: f["max_rating"] = max_rating
+    return f or None
+
+
+def _partner_matches_filter(profile: dict, f: Optional[dict]) -> bool:
+    """Return True if partner profile satisfies the caller's filter."""
+    if not f:
+        return True
+
+    # Gender
+    if "gender" in f:
+        pg = (profile.get("gender") or "").lower()
+        if pg != f["gender"]:
+            return False
+
+    # Age range
+    if "age_range" in f:
+        age = profile.get("age")
+        if age is None:
+            return False
+        lo, hi = _parse_age_range(f["age_range"])
+        if lo is not None and age < lo:
+            return False
+        if hi is not None and age > hi:
+            return False
+
+    # Rating range — new users have avg_rating = 0, treat as unrated → skip filter
+    partner_rating = float(profile.get("avg_rating") or 0)
+    rating_count   = int(profile.get("rating_count") or 0)
+    if rating_count > 0:   # only filter rated users
+        if "min_rating" in f and partner_rating < f["min_rating"]:
+            return False
+        if "max_rating" in f and partner_rating > f["max_rating"]:
+            return False
+
+    return True
+
+
+def _parse_age_range(age_range: str) -> tuple[Optional[int], Optional[int]]:
+    if "-" in age_range:
+        parts = age_range.split("-")
+        try:
+            return int(parts[0]), int(parts[1])
+        except (ValueError, IndexError):
+            return None, None
+    if age_range.endswith("+"):
+        try:
+            return int(age_range[:-1]), None
+        except ValueError:
+            return None, None
+    return None, None
+
+
 @router.websocket("/ws/match")
-async def websocket_match(websocket: WebSocket, token: str = Query(...)):
+async def websocket_match(
+    websocket: WebSocket,
+    token: str = Query(...),
+    gender: Optional[str] = Query(None),
+    age_range: Optional[str] = Query(None),
+    min_rating: Optional[float] = Query(None),
+    max_rating: Optional[float] = Query(None),
+):
     """
     Hold a user in the waiting queue and try to pair them on a 1-second tick.
 
@@ -180,15 +250,11 @@ async def websocket_match(websocket: WebSocket, token: str = Query(...)):
     """
     user_id = await _authenticate(token)
     if not user_id:
-        # 4001 = application-level "unauthorized" close code.
         await websocket.close(code=4001)
         return
 
     await websocket.accept()
 
-    # Defensive: if this user already has a live room (e.g. they opened the
-    # app fresh while still in a call), don't re-queue them; tell the client
-    # to bounce to /call.
     existing_room = await redis_client.get_user_room(user_id)
     if existing_room:
         await _send_ws(websocket, {
@@ -201,11 +267,13 @@ async def websocket_match(websocket: WebSocket, token: str = Query(...)):
             pass
         return
 
+    user_filter = _parse_filter(gender, age_range, min_rating, max_rating)
+
     await redis_client.add_to_queue(user_id)
     await _send_ws(websocket, {"type": "waiting"})
 
     _active_ws[user_id] = websocket
-    matcher = asyncio.create_task(_matcher_loop(user_id, websocket))
+    matcher = asyncio.create_task(_matcher_loop(user_id, websocket, user_filter))
 
     try:
         while True:
@@ -233,11 +301,11 @@ async def websocket_match(websocket: WebSocket, token: str = Query(...)):
             pass
 
 
-async def _matcher_loop(user_id: str, websocket: WebSocket):
+async def _matcher_loop(user_id: str, websocket: WebSocket, user_filter: Optional[dict] = None):
     """
     Background task per WS connection.  Polls Redis on a fixed cadence trying
-    to claim a partner.  When successful, broadcasts the match via Realtime,
-    pushes the same payload to our own WS as a fast-path, and exits.
+    to claim a partner.  Applies filter check before confirming a match —
+    incompatible partners are returned to the queue.
     """
     try:
         while True:
@@ -246,27 +314,33 @@ async def _matcher_loop(user_id: str, websocket: WebSocket):
                 await asyncio.sleep(_MATCH_POLL_INTERVAL_S)
                 continue
 
+            # Filter check — fetch partner profile and verify it meets the
+            # caller's preferences.  If not, put partner back and keep looking.
+            if user_filter:
+                partner_profile = await _fetch_profile(partner_id)
+                if not _partner_matches_filter(partner_profile, user_filter):
+                    logger.info(
+                        "filter skip: %s rejected partner %s (filter=%s)",
+                        user_id, partner_id, user_filter,
+                    )
+                    await redis_client.add_to_queue(partner_id)
+                    await asyncio.sleep(_MATCH_POLL_INTERVAL_S)
+                    continue
+
             try:
                 payload_me, payload_partner = await _create_match(user_id, partner_id)
             except Exception as e:
-                # Anything went wrong building the match — return both users to
-                # the queue and retry next tick.
                 logger.exception("create_match failed: %r", e)
                 await redis_client.add_to_queue(user_id)
                 await redis_client.add_to_queue(partner_id)
                 await asyncio.sleep(_MATCH_POLL_INTERVAL_S)
                 continue
 
-            # Notify both sides via Supabase Realtime (cross-instance safe).
             await asyncio.gather(
                 broadcast(f"user:{user_id}", "matched", payload_me),
                 broadcast(f"user:{partner_id}", "matched", payload_partner),
             )
 
-            # Fast-path WS delivery for BOTH users (same-pod only).
-            # Partner relies on Realtime if on a different pod — that's fine.
-            # Deduplication on the Flutter side (_matchReceived flag) handles
-            # the case where partner gets both WS + Realtime.
             partner_ws = _active_ws.get(partner_id)
             await asyncio.gather(
                 _send_ws(websocket, {"type": "matched", **payload_me}),
@@ -276,6 +350,4 @@ async def _matcher_loop(user_id: str, websocket: WebSocket):
             return
 
     except asyncio.CancelledError:
-        # Caller cancelled — nothing else to do.  Queue removal happens in
-        # the WS handler's finally block.
         raise
