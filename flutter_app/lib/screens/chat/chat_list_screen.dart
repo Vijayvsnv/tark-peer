@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
+import '../../models/match_event.dart';
+import '../../services/direct_call_service.dart';
 import '../../services/friend_service.dart';
 import '../../services/message_service.dart';
 import '../../services/presence_service.dart';
@@ -65,6 +67,38 @@ class _ChatListScreenState extends State<ChatListScreen> {
     super.dispose();
   }
 
+  Future<void> _callFriend(BuildContext ctx, String partnerId, String name, String? avatarUrl) async {
+    final status = _presenceMap[partnerId] ?? 'offline';
+    if (status == 'offline') {
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        const SnackBar(content: Text('User is offline')),
+      );
+      return;
+    }
+    if (status == 'in_call') {
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        const SnackBar(content: Text('User is currently in a call')),
+      );
+      return;
+    }
+    final data = await DirectCallService.instance.initiateCall(partnerId);
+    if (!mounted || data == null) {
+      if (mounted) ScaffoldMessenger.of(ctx).showSnackBar(
+        const SnackBar(content: Text('Could not start call. Try again.')),
+      );
+      return;
+    }
+    final event = MatchEvent(
+      channelName: data['channel_name'] as String,
+      agoraToken: data['agora_token'] as String,
+      agoraUid: data['agora_uid'] as int,
+      agoraAppId: data['agora_app_id'] as String,
+      partnerId: partnerId,
+      partner: PartnerInfo(name: name, avatarUrl: avatarUrl),
+    );
+    ctx.push('/call', extra: event);
+  }
+
   Color _dotColor(String partnerId) {
     final status = _presenceMap[partnerId] ?? 'offline';
     if (status == 'online') return kSuccess;
@@ -89,7 +123,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/home'),
+          onPressed: () => context.pop(),
         ),
         title: const Text('Messages'),
       ),
@@ -157,15 +191,16 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       trailing: IconButton(
-                        icon: const Icon(Icons.phone_outlined, color: kPrimary),
+                        icon: Icon(
+                          Icons.phone_outlined,
+                          color: (_presenceMap[partnerId] ?? 'offline') == 'online'
+                              ? kPrimary
+                              : kTextMuted,
+                        ),
                         tooltip: 'Call friend',
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Direct call coming soon!')),
-                          );
-                        },
+                        onPressed: () => _callFriend(context, partnerId, name, avatarUrl),
                       ),
-                      onTap: () => context.go('/chat/$partnerId'),
+                      onTap: () => context.push('/chat/$partnerId'),
                     );
                   },
                 ),

@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:confetti/confetti.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../models/match_event.dart';
@@ -22,10 +24,15 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
   final _auth = AuthService();
   late AnimationController _pulseCtrl;
   late Animation<double> _pulse;
+  late AnimationController _celebrateCtrl;
+  late Animation<double> _celebrateScale;
+  final _confettiCtrl = ConfettiController(duration: const Duration(milliseconds: 1200));
   StreamSubscription? _sub;
   bool _cancelling = false;
   int _remaining = 90;
   Timer? _timer;
+  bool _matched = false;
+  MatchEvent? _matchedEvent;
 
   @override
   void initState() {
@@ -34,6 +41,14 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
       ..repeat(reverse: true);
     _pulse = Tween<double>(begin: 0.95, end: 1.05).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+    _celebrateCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+    _celebrateScale = CurvedAnimation(
+      parent: _celebrateCtrl,
+      curve: Curves.elasticOut,
     );
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
@@ -76,13 +91,25 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
     if (!mounted) return;
     final type = msg['type'] as String?;
     if (type == 'matched') {
-      debugPrint('[MatchingScreen] Match found! Going to /call');
+      debugPrint('[MatchingScreen] Match found! Celebrating...');
       final event = MatchEvent.fromJson(msg);
-      context.go('/call', extra: event);
+      _celebrateAndNavigate(event);
     } else if (type == 'call_ended' || type == 'error') {
       debugPrint('[MatchingScreen] call_ended/error — going home. msg=$msg');
       context.go('/home');
     }
+  }
+
+  Future<void> _celebrateAndNavigate(MatchEvent event) async {
+    if (_matched) return;
+    _matched = true;
+    _timer?.cancel();
+    HapticFeedback.heavyImpact();
+    setState(() => _matchedEvent = event);
+    _celebrateCtrl.forward(from: 0);
+    _confettiCtrl.play();
+    await Future.delayed(const Duration(milliseconds: 1400));
+    if (mounted) context.go('/call', extra: event);
   }
 
   Future<void> _cancel() async {
@@ -122,6 +149,8 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
     _timer?.cancel();
     _matchService.dispose();
     _pulseCtrl.dispose();
+    _celebrateCtrl.dispose();
+    _confettiCtrl.dispose();
     super.dispose();
   }
 
@@ -129,9 +158,11 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kBackground,
-      body: SafeArea(
-        child: Center(
-          child: Column(
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Center(
+              child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               SizedBox(
@@ -229,7 +260,7 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
               ),
               const SizedBox(height: 20),
               OutlinedButton.icon(
-                onPressed: _cancelling ? null : _cancel,
+                onPressed: _cancelling || _matched ? null : _cancel,
                 icon: const Icon(Icons.close, color: kDanger, size: 18),
                 label: const Text('Cancel', style: TextStyle(color: kDanger, fontSize: 15, fontWeight: FontWeight.w600)),
                 style: OutlinedButton.styleFrom(
@@ -239,7 +270,109 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
                 ),
               ),
             ],
-          ),
+                ),
+              ),
+            ),
+            if (_matchedEvent != null) _CelebrationOverlay(
+              event: _matchedEvent!,
+              scale: _celebrateScale,
+              confetti: _confettiCtrl,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CelebrationOverlay extends StatelessWidget {
+  final MatchEvent event;
+  final Animation<double> scale;
+  final ConfettiController confetti;
+
+  const _CelebrationOverlay({
+    required this.event,
+    required this.scale,
+    required this.confetti,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withOpacity(0.55),
+        child: Stack(
+          children: [
+            Align(
+              alignment: Alignment.topCenter,
+              child: ConfettiWidget(
+                confettiController: confetti,
+                blastDirection: pi / 2,
+                blastDirectionality: BlastDirectionality.explosive,
+                maxBlastForce: 22,
+                minBlastForce: 8,
+                emissionFrequency: 0.08,
+                numberOfParticles: 26,
+                gravity: 0.28,
+                shouldLoop: false,
+                colors: const [
+                  Color(0xFFF97316),
+                  Color(0xFF60A5FA),
+                  Color(0xFF34D399),
+                  Color(0xFF8B5CF6),
+                  Color(0xFFFACC15),
+                ],
+              ),
+            ),
+            Center(
+              child: ScaleTransition(
+                scale: scale,
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 30),
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 26),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 76,
+                        height: 76,
+                        decoration: const BoxDecoration(
+                          color: kSuccess,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.check_rounded, color: Colors.white, size: 46),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Partner Found!',
+                        style: TextStyle(
+                          color: kTextPrimary,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Connecting you with ${event.partner.name}…',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: kTextSecondary, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -299,40 +432,35 @@ class _RingPainter extends CustomPainter {
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
 
-    // Green segment (90-60s) — segment 0
-    final greenProgress = remaining > 60 ? (remaining - 60) / 30.0 : 0.0;
-    if (greenProgress > 0) {
+    // Only the active segment is colored — others stay grey.
+    // Green (90→60s) → Yellow (60→30s) → Red (30→0s)
+    if (remaining > 60) {
       fgPaint.color = Colors.green;
+      final progress = (remaining - 60) / 30.0;
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
         -pi / 2 + gapAngle / 2,
-        segmentSweep * greenProgress,
+        segmentSweep * progress,
         false,
         fgPaint,
       );
-    }
-
-    // Yellow segment (60-30s) — segment 1
-    final yellowProgress = remaining > 30 ? (min(remaining, 60) - 30) / 30.0 : 0.0;
-    if (yellowProgress > 0) {
+    } else if (remaining > 30) {
       fgPaint.color = Colors.amber;
+      final progress = (remaining - 30) / 30.0;
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
         -pi / 2 + (2 * pi / 3) + gapAngle / 2,
-        segmentSweep * yellowProgress,
+        segmentSweep * progress,
         false,
         fgPaint,
       );
-    }
-
-    // Red segment (30-0s) — segment 2
-    final redProgress = min(remaining, 30) / 30.0;
-    if (redProgress > 0) {
+    } else if (remaining > 0) {
       fgPaint.color = Colors.red;
+      final progress = remaining / 30.0;
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
         -pi / 2 + 2 * (2 * pi / 3) + gapAngle / 2,
-        segmentSweep * redProgress,
+        segmentSweep * progress,
         false,
         fgPaint,
       );

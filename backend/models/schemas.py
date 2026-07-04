@@ -36,6 +36,10 @@ class MatchEvent(BaseModel):
     partner: PartnerInfo
 
 
+class DirectCallBody(BaseModel):
+    receiver_id: str
+
+
 class CallEndEvent(BaseModel):
     channel_name: str
     reason: str

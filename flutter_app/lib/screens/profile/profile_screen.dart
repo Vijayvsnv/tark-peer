@@ -42,7 +42,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: kBackground,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: kTextPrimary),
-          onPressed: () => context.go('/home'),
+          onPressed: () => context.pop(),
         ),
         title: const Text(
           'Profile',
@@ -143,7 +143,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                   const SizedBox(height: 16),
                   OutlinedButton.icon(
-                    onPressed: () => context.go('/setup'),
+                    onPressed: () => context.push('/setup'),
                     icon: const Icon(Icons.edit, size: 16, color: kPrimary),
                     label: const Text('Edit Profile', style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600)),
                     style: OutlinedButton.styleFrom(

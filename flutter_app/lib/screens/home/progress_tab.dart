@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme.dart';
 import '../../services/profile_service.dart';
+import '../../services/game_progress_service.dart';
 
 class ProgressTab extends StatefulWidget {
   const ProgressTab({super.key});
@@ -12,6 +13,7 @@ class ProgressTab extends StatefulWidget {
 class _ProgressTabState extends State<ProgressTab> {
   final _profileService = ProfileService();
   Map<String, dynamic>? _stats;
+  Map<String, int>? _gameStats;
   bool _loading = true;
 
   @override
@@ -21,12 +23,22 @@ class _ProgressTabState extends State<ProgressTab> {
   }
 
   Future<void> _load() async {
-    try {
-      final s = await _profileService.getCallStats();
-      if (mounted) setState(() { _stats = s; _loading = false; });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
+    if (mounted) setState(() => _loading = true);
+    await Future.wait([
+      Future(() async {
+        try {
+          final s = await _profileService.getCallStats();
+          if (mounted) setState(() => _stats = s);
+        } catch (_) {}
+      }),
+      Future(() async {
+        try {
+          final s = await GameProgressService.instance.getStats();
+          if (mounted) setState(() => _gameStats = s);
+        } catch (_) {}
+      }),
+    ]);
+    if (mounted) setState(() => _loading = false);
   }
 
   String _formatTotal(int seconds) {
@@ -85,7 +97,7 @@ class _ProgressTabState extends State<ProgressTab> {
   }
 
   Widget _buildContent() {
-    final s = _stats!;
+    final s = _stats ?? {'total_calls': 0, 'total_seconds': 0, 'longest_seconds': 0, 'streak': 0, 'this_week': 0, 'last_week': 0};
     final totalCalls = s['total_calls'] as int;
     final totalSeconds = s['total_seconds'] as int;
     final longestSeconds = s['longest_seconds'] as int;
@@ -93,31 +105,27 @@ class _ProgressTabState extends State<ProgressTab> {
     final thisWeek = s['this_week'] as int;
     final lastWeek = s['last_week'] as int;
 
-    if (totalCalls == 0) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.only(top: 60),
-          child: Column(
-            children: [
-              Icon(Icons.bar_chart_outlined, color: kTextMuted, size: 64),
-              const SizedBox(height: 16),
-              const Text(
-                'No calls yet',
-                style: TextStyle(color: kTextPrimary, fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Start calling to see your progress!',
-                style: TextStyle(color: kTextSecondary, fontSize: 14),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (totalCalls == 0) ...[
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 20, bottom: 8),
+              child: Column(
+                children: [
+                  Icon(Icons.call_outlined, color: kTextMuted, size: 48),
+                  const SizedBox(height: 12),
+                  const Text('No calls yet',
+                      style: TextStyle(color: kTextPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  const Text('Start calling to track your call progress!',
+                      style: TextStyle(color: kTextSecondary, fontSize: 13)),
+                ],
+              ),
+            ),
+          ),
+        ] else ...[
         // ── Call Stats ────────────────────────────────────────────────────────
         _card(
           child: Row(
@@ -268,7 +276,80 @@ class _ProgressTabState extends State<ProgressTab> {
             ],
           ),
         ),
-      ],
+      ],  // end else block
+
+        // ── Game Progress ──────────────────────────────────────────────────────
+        if (_gameStats != null) ...[
+          const SizedBox(height: 28),
+          const Text(
+            'GAME PROGRESS',
+            style: TextStyle(color: kPrimary, fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 1.2),
+          ),
+          const SizedBox(height: 4),
+          const Text('Your English game stats', style: TextStyle(color: kTextSecondary, fontSize: 13)),
+          const SizedBox(height: 14),
+          _gameStatsCard(),
+        ],
+      ],  // end children
+    );
+  }
+
+  Widget _gameStatsCard() {
+    final totalGames = _gameStats!['total_games'] ?? 0;
+    final totalCorrect = _gameStats!['total_correct'] ?? 0;
+    final gameStreak = _gameStats!['streak'] ?? 0;
+    final accuracy = totalGames == 0 ? 0 : (totalCorrect / (totalGames * 10) * 100).round().clamp(0, 100);
+
+    if (totalGames == 0) {
+      return _card(
+        child: Row(
+          children: [
+            Icon(Icons.games_rounded, color: kTextMuted, size: 32),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Text('No games played yet — head to the Games tab to start!',
+                  style: TextStyle(color: kTextSecondary, fontSize: 13)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return _card(
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _statBlock(
+                  icon: Icons.games_rounded,
+                  iconColor: const Color(0xFFFC5C7D),
+                  value: '$totalGames',
+                  label: 'Games Played',
+                ),
+              ),
+              Container(width: 1, height: 56, color: kBorder),
+              Expanded(
+                child: _statBlock(
+                  icon: Icons.check_circle_outline_rounded,
+                  iconColor: kSuccess,
+                  value: '$accuracy%',
+                  label: 'Accuracy',
+                ),
+              ),
+              Container(width: 1, height: 56, color: kBorder),
+              Expanded(
+                child: _statBlock(
+                  icon: Icons.local_fire_department_rounded,
+                  iconColor: const Color(0xFFFF6B35),
+                  value: gameStreak > 0 ? '$gameStreak 🔥' : '—',
+                  label: 'Day Streak',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

@@ -6,13 +6,17 @@ call_ended event over Supabase Realtime (subscribed on `room:{channel_name}`),
 so we never need to know which backend instance is holding which WebSocket.
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from fastapi import APIRouter, Header, HTTPException
 
-from models.schemas import CallEndEvent, CallRateEvent
+from core.config import settings
+from models.schemas import CallEndEvent, CallRateEvent, DirectCallBody
 from services import redis_client
+from services.agora_service import generate_token
 from services.supabase_client import supabase_admin
 from services.supabase_realtime import broadcast
 
@@ -95,6 +99,51 @@ async def end_call(data: CallEndEvent, authorization: str = Header(...)):
     )
 
     return {"status": "ok"}
+
+
+@router.post("/direct")
+async def direct_call(body: DirectCallBody, authorization: str = Header(...)):
+    """Initiate a direct call to a friend who is online."""
+    token = authorization.replace("Bearer ", "")
+    user = await _get_user(token)
+    caller_id = user["id"]
+
+    channel_name = str(uuid4())
+    token_c, uid_c = generate_token(channel_name, caller_id, settings.agora_app_id, settings.agora_app_certificate)
+    token_r, uid_r = generate_token(channel_name, body.receiver_id, settings.agora_app_id, settings.agora_app_certificate)
+
+    try:
+        profile = (
+            supabase_admin.table("profiles")
+            .select("name,age,gender,avatar_url,bio,occupation,sector,country,state,mother_tongue")
+            .eq("id", caller_id)
+            .single()
+            .execute()
+            .data
+        ) or {"name": "User"}
+    except Exception:
+        profile = {"name": "User"}
+
+    # Broadcast incoming call to receiver's personal channel
+    await broadcast(
+        f"direct:{body.receiver_id}",
+        "incoming_call",
+        {
+            "channel_name": channel_name,
+            "agora_token": token_r,
+            "agora_uid": uid_r,
+            "agora_app_id": settings.agora_app_id,
+            "partner_id": caller_id,
+            "partner": profile,
+        },
+    )
+
+    return {
+        "channel_name": channel_name,
+        "agora_token": token_c,
+        "agora_uid": uid_c,
+        "agora_app_id": settings.agora_app_id,
+    }
 
 
 @router.post("/rate")

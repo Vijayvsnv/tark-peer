@@ -67,73 +67,74 @@ class _FilterSheetState extends State<_FilterSheet> {
           ),
           const SizedBox(height: 24),
 
-          // ── Gender ──────────────────────────────────────────────────────────
-          const Text('Gender', style: TextStyle(color: kTextPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _genderChip('Male', Icons.male),
-              const SizedBox(width: 10),
-              _genderChip('Female', Icons.female),
-              const SizedBox(width: 10),
-              _genderChip('Any', Icons.people_outline),
-            ],
+          // ── Gender (LOCKED) ─────────────────────────────────────────────────
+          _LockedSection(
+            label: 'Gender',
+            onTap: () => _showLockedSnackbar(context),
+            child: Row(
+              children: [
+                _genderChip('Male', Icons.male),
+                const SizedBox(width: 10),
+                _genderChip('Female', Icons.female),
+                const SizedBox(width: 10),
+                _genderChip('Any', Icons.people_outline),
+              ],
+            ),
           ),
           const SizedBox(height: 24),
 
-          // ── Age Range ────────────────────────────────────────────────────────
-          const Text('Age Range', style: TextStyle(color: kTextPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 10),
-          _DropdownField<String>(
-            value: _ageRange ?? 'Any',
-            items: _ageOptions,
-            label: (v) => v,
-            onChanged: (v) => setState(() => _ageRange = v == 'Any' ? null : v),
+          // ── Age Range (LOCKED) ───────────────────────────────────────────────
+          _LockedSection(
+            label: 'Age Range',
+            onTap: () => _showLockedSnackbar(context),
+            child: _DropdownField<String>(
+              value: _ageRange ?? 'Any',
+              items: _ageOptions,
+              label: (v) => v,
+              onChanged: (_) {},
+            ),
           ),
           const SizedBox(height: 24),
 
-          // ── Rating Range ─────────────────────────────────────────────────────
-          const Text('Rating Range', style: TextStyle(color: kTextPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('From', style: TextStyle(color: kTextSecondary, fontSize: 12)),
-                    const SizedBox(height: 6),
-                    _DropdownField<double?>(
-                      value: _minRating,
-                      items: [null, ..._ratingOptions],
-                      label: (v) => v == null ? 'Any' : _ratingLabel(v),
-                      onChanged: (v) => setState(() {
-                        _minRating = v;
-                        if (v != null && _maxRating != null && _maxRating! < v) {
-                          _maxRating = null;
-                        }
-                      }),
-                    ),
-                  ],
+          // ── Rating Range (LOCKED) ────────────────────────────────────────────
+          _LockedSection(
+            label: 'Rating Range',
+            onTap: () => _showLockedSnackbar(context),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('From', style: TextStyle(color: kTextSecondary, fontSize: 12)),
+                      const SizedBox(height: 6),
+                      _DropdownField<double?>(
+                        value: null,
+                        items: [null, ..._ratingOptions],
+                        label: (v) => v == null ? 'Any' : _ratingLabel(v),
+                        onChanged: (_) {},
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('To', style: TextStyle(color: kTextSecondary, fontSize: 12)),
-                    const SizedBox(height: 6),
-                    _DropdownField<double?>(
-                      value: _maxRating,
-                      items: [null, ..._ratingOptions.where((r) => _minRating == null || r >= _minRating!)],
-                      label: (v) => v == null ? 'Any' : _ratingLabel(v),
-                      onChanged: (v) => setState(() => _maxRating = v),
-                    ),
-                  ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('To', style: TextStyle(color: kTextSecondary, fontSize: 12)),
+                      const SizedBox(height: 6),
+                      _DropdownField<double?>(
+                        value: null,
+                        items: [null, ..._ratingOptions],
+                        label: (v) => v == null ? 'Any' : _ratingLabel(v),
+                        onChanged: (_) {},
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 32),
 
@@ -214,6 +215,72 @@ class _FilterSheetState extends State<_FilterSheet> {
           ),
         ),
       ),
+    );
+  }
+}
+
+void _showLockedSnackbar(BuildContext context) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: const Row(
+        children: [
+          Icon(Icons.lock_outline, color: Colors.white, size: 16),
+          SizedBox(width: 8),
+          Text('Premium feature — coming soon!'),
+        ],
+      ),
+      backgroundColor: const Color(0xFF1E293B),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      duration: const Duration(seconds: 2),
+    ),
+  );
+}
+
+class _LockedSection extends StatelessWidget {
+  final String label;
+  final Widget child;
+  final VoidCallback onTap;
+
+  const _LockedSection({
+    required this.label,
+    required this.child,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(label, style: const TextStyle(color: kTextPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 6),
+            const Icon(Icons.lock_outline_rounded, size: 14, color: kTextMuted),
+          ],
+        ),
+        const SizedBox(height: 10),
+        GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: Stack(
+            children: [
+              Opacity(
+                opacity: 0.4,
+                child: AbsorbPointer(child: child),
+              ),
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

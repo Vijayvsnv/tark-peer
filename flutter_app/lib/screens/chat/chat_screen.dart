@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
+import '../../models/match_event.dart';
+import '../../services/direct_call_service.dart';
 import '../../services/message_service.dart';
+import '../../services/presence_service.dart';
 import '../../widgets/user_avatar.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -16,14 +19,18 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final _messageService = MessageService();
+  final _presenceService = PresenceService();
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
 
   List<Map<String, dynamic>> _messages = [];
   String _friendName = '';
   String? _friendAvatarUrl;
+  String _friendStatus = 'offline';
   bool _sending = false;
+  bool _calling = false;
   RealtimeChannel? _channel;
+  StreamSubscription? _presenceSub;
 
   String get _myId => Supabase.instance.client.auth.currentUser!.id;
 
@@ -34,6 +41,11 @@ class _ChatScreenState extends State<ChatScreen> {
     _loadMessages();
     _channel = _messageService.subscribeToMessages(widget.friendId, _loadMessages);
     _messageService.markRead(widget.friendId);
+    _presenceSub = _presenceService
+        .watchPresence([widget.friendId])
+        .listen((map) {
+      if (mounted) setState(() => _friendStatus = map[widget.friendId] ?? 'offline');
+    });
   }
 
   Future<void> _loadFriend() async {
@@ -89,11 +101,54 @@ class _ChatScreenState extends State<ChatScreen> {
     return 'deletes soon';
   }
 
+  Future<void> _callFriend() async {
+    if (_calling) return;
+    if (_friendStatus == 'offline') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('User is offline')),
+      );
+      return;
+    }
+    if (_friendStatus == 'in_call') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('User is currently in a call')),
+      );
+      return;
+    }
+    setState(() => _calling = true);
+    final data = await DirectCallService.instance.initiateCall(widget.friendId);
+    if (!mounted) return;
+    setState(() => _calling = false);
+    if (data == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not start call. Try again.')),
+      );
+      return;
+    }
+    final event = MatchEvent(
+      channelName: data['channel_name'] as String,
+      agoraToken: data['agora_token'] as String,
+      agoraUid: data['agora_uid'] as int,
+      agoraAppId: data['agora_app_id'] as String,
+      partnerId: widget.friendId,
+      partner: PartnerInfo(name: _friendName, avatarUrl: _friendAvatarUrl),
+    );
+    context.push('/call', extra: event);
+  }
+
+  Color get _statusDotColor {
+    if (_friendStatus == 'online') return Colors.green;
+    if (_friendStatus == 'in_call') return Colors.red;
+    return Colors.grey;
+  }
+
   @override
   void dispose() {
     if (_channel != null) {
       Supabase.instance.client.removeChannel(_channel!);
     }
+    _presenceSub?.cancel();
+    _presenceService.dispose();
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -106,7 +161,7 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/chat'),
+          onPressed: () => context.pop(),
         ),
         title: Row(
           children: [
@@ -122,13 +177,34 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.phone_outlined, color: kPrimary),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Direct call coming soon!')),
-              );
-            },
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: _calling
+                    ? const SizedBox(
+                        width: 20, height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: kPrimary),
+                      )
+                    : Icon(
+                        Icons.phone_outlined,
+                        color: _friendStatus == 'online' ? kPrimary : kTextMuted,
+                      ),
+                onPressed: _calling ? null : _callFriend,
+              ),
+              Positioned(
+                right: 10,
+                top: 10,
+                child: Container(
+                  width: 8, height: 8,
+                  decoration: BoxDecoration(
+                    color: _statusDotColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: kBackground, width: 1.5),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

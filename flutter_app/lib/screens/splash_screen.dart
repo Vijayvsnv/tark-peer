@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/onboarding_service.dart';
 import '../services/profile_service.dart';
 import '../core/theme.dart';
 
@@ -24,7 +25,10 @@ class _SplashScreenState extends State<SplashScreen> {
 
     final session = Supabase.instance.client.auth.currentSession;
     if (session == null) {
-      context.go('/login');
+      // First launch on device → show intro slides before login.
+      final seen = await OnboardingService().hasSeen();
+      if (!mounted) return;
+      context.go(seen ? '/login' : '/onboarding');
       return;
     }
 
@@ -54,9 +58,17 @@ class _SplashScreenState extends State<SplashScreen> {
               width: 340,
               fit: BoxFit.contain,
             ),
-            const SizedBox(height: 12),
             const Text(
-              'Random voice conversations',
+              'Welcome to Tark Peer',
+              style: TextStyle(
+                color: kTextPrimary,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Talk. Connect. Grow.',
               style: TextStyle(color: kTextSecondary, fontSize: 14),
             ),
             const SizedBox(height: 40),
