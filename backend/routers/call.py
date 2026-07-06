@@ -47,13 +47,21 @@ async def end_call(data: CallEndEvent, authorization: str = Header(...)):
     user_id = user["id"]
     channel_name = data.channel_name
 
+    # Compute duration from call_info (Redis) so we don't need an extra
+    # Supabase round-trip just to read started_at.
+    info = await redis_client.get_call_info(channel_name)
+
+    # Participant check: if the call is still active in Redis, verify the
+    # caller is actually one of the two participants.  If call_info is already
+    # gone (call already ended), let the idempotent cleanup proceed normally.
+    if info:
+        if user_id != info.get("user_a") and user_id != info.get("user_b"):
+            raise HTTPException(status_code=403, detail="Not a participant in this call")
+
     # Look up partner BEFORE we delete the partner mapping.
     partner_id = await redis_client.get_partner(channel_name, user_id)
 
-    # Compute duration from call_info (Redis) so we don't need an extra
-    # Supabase round-trip just to read started_at.
     duration_seconds = None
-    info = await redis_client.get_call_info(channel_name)
     if info and "started_at" in info:
         try:
             started_unix = float(info["started_at"])
@@ -108,6 +116,31 @@ async def direct_call(body: DirectCallBody, authorization: str = Header(...)):
     user = await _get_user(token)
     caller_id = user["id"]
 
+    # Rate limit: max 5 direct call initiations per minute per user
+    if not await redis_client.check_rate_limit(f"direct:{caller_id}", 5, 60):
+        raise HTTPException(status_code=429, detail="Too many call attempts. Try again later.")
+
+    # Friendship check: caller and receiver must have an accepted friendship
+    try:
+        friendship_resp = (
+            supabase_admin.table("friendships")
+            .select("id")
+            .eq("status", "accepted")
+            .or_(
+                f"and(requester_id.eq.{caller_id},receiver_id.eq.{body.receiver_id}),"
+                f"and(requester_id.eq.{body.receiver_id},receiver_id.eq.{caller_id})"
+            )
+            .limit(1)
+            .execute()
+        )
+        if not friendship_resp.data:
+            raise HTTPException(status_code=403, detail="You can only call friends")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning("friendship check failed: %r", e)
+        raise HTTPException(status_code=403, detail="You can only call friends")
+
     channel_name = str(uuid4())
     token_c, uid_c = generate_token(channel_name, caller_id, settings.agora_app_id, settings.agora_app_certificate)
     token_r, uid_r = generate_token(channel_name, body.receiver_id, settings.agora_app_id, settings.agora_app_certificate)
@@ -153,17 +186,38 @@ async def rate_call(data: CallRateEvent, authorization: str = Header(...)):
     Idempotent per (room_id, rater_id) via unique constraint — an UPSERT
     lets the user change their mind before leaving the screen.
     """
-    if not (1 <= data.stars <= 5):
-        raise HTTPException(status_code=400, detail="Stars must be 1-5")
-    if not data.rated_user_id or not data.channel_name:
-        raise HTTPException(status_code=400, detail="Missing fields")
-
     token = authorization.replace("Bearer ", "")
     user = await _get_user(token)
     rater_id = user["id"]
 
     if rater_id == data.rated_user_id:
         raise HTTPException(status_code=400, detail="Cannot rate yourself")
+
+    # Rate limit: max 30 ratings per hour per user
+    if not await redis_client.check_rate_limit(f"rate:{rater_id}", 30, 3600):
+        raise HTTPException(status_code=429, detail="Too many ratings. Try again later.")
+
+    # Verify both users were actually participants in this call
+    try:
+        call_resp = (
+            supabase_admin.table("call_history")
+            .select("user_a,user_b")
+            .eq("room_id", data.channel_name)
+            .single()
+            .execute()
+        )
+    except Exception:
+        raise HTTPException(status_code=400, detail="Call not found")
+
+    if not call_resp.data:
+        raise HTTPException(status_code=400, detail="Call not found")
+
+    call_data = call_resp.data
+    participants = {call_data.get("user_a"), call_data.get("user_b")}
+    if rater_id not in participants:
+        raise HTTPException(status_code=403, detail="You were not in this call")
+    if data.rated_user_id not in participants:
+        raise HTTPException(status_code=400, detail="Rated user was not in this call")
 
     try:
         supabase_admin.table("call_ratings").upsert(

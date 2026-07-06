@@ -18,12 +18,14 @@ class CallService {
     required int uid,
     Function(int uid)? onUserJoined,
     Function(int uid)? onUserOffline,
-    // true = partner speaking, false = silent
+    // true = partner speaking, false = silent (2-person calls)
     Function(bool speaking)? onPartnerSpeaking,
     // Agora AudioRoute int values:
     //  0=Headset  1=Earpiece  2=HeadsetNoMic  3=Speakerphone
     //  4=Loudspeaker  5=BluetoothHeadset  -1=Default
     Function(int routing)? onAudioRoutingChanged,
+    // Per-UID volume map — uid=0 means local user (multi-user rooms)
+    Function(Map<int, int> volumes)? onVolumesChanged,
   }) async {
     _engine = createAgoraRtcEngine();
     await _engine!.initialize(RtcEngineContext(appId: appId));
@@ -43,6 +45,13 @@ class CallService {
           (s) => (s.uid ?? 0) != 0 && (s.volume ?? 0) > 25,
         );
         onPartnerSpeaking?.call(partnerSpeaking);
+        if (onVolumesChanged != null) {
+          final vols = <int, int>{};
+          for (final s in speakers) {
+            vols[s.uid ?? 0] = s.volume ?? 0;
+          }
+          onVolumesChanged(vols);
+        }
       },
       onAudioRoutingChanged: (routing) {
         debugPrint('[CallService] Audio routing: $routing');

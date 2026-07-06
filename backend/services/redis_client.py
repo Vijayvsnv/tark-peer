@@ -242,3 +242,19 @@ async def claim_expired_rooms(now: float) -> list[str]:
             _claim_expired_sha, 1, ACTIVE_ROOMS_KEY, str(now)
         )
     return list(result) if result else []
+
+
+# ── Rate limiting ────────────────────────────────────────────────────────────
+
+async def check_rate_limit(key: str, max_calls: int, window_seconds: int) -> bool:
+    """
+    Increment a sliding counter keyed by `key`.  Returns True (allowed) if
+    the count is within `max_calls`, False (blocked) if exceeded.
+    The TTL is set only on the first increment so the window is fixed, not
+    rolling — simple and safe for our abuse-prevention use case.
+    """
+    full_key = f"rl:{key}"
+    count = await redis.incr(full_key)
+    if count == 1:
+        await redis.expire(full_key, window_seconds)
+    return count <= max_calls

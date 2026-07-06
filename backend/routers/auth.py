@@ -1,7 +1,10 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, Header
 from services.supabase_client import supabase_admin
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/verify")
@@ -17,4 +20,5 @@ async def verify_token(authorization: str = Header(...)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=401, detail=str(e))
+        logger.warning("token verify failed: %r", e)
+        raise HTTPException(status_code=401, detail="Invalid token")

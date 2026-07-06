@@ -209,10 +209,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
           ),
         ),
-        title: Image.asset(
-          'assets/Tark-pear-logo-change.png',
-          height: 175,
-          fit: BoxFit.contain,
+        title: Transform.translate(
+          offset: const Offset(0, -5),
+          child: Image.asset(
+            'assets/Tark-pear-logo-change.png',
+            height: 175,
+            fit: BoxFit.contain,
+          ),
         ),
         centerTitle: true,
         actions: [
@@ -310,7 +313,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                SizedBox(height: profileIncomplete ? 40 : 80),
+                SizedBox(height: profileIncomplete ? 12 : 20),
                 const Text(
                   'PRACTICE WITH HUMANS',
                   style: TextStyle(
@@ -323,8 +326,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 const SizedBox(height: 8),
                 const Text(
                   'Connect with real people and practice',
+                  textAlign: TextAlign.center,
                   style: TextStyle(color: kTextSecondary, fontSize: 15),
                 ),
+                const SizedBox(height: 28),
                 const Spacer(),
                 Center(
                   child: Column(
@@ -360,12 +365,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         online: _online,
                         inCall: _inCall,
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 16),
                       const _PeakHoursCard(),
+                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
-                const Spacer(),
               ],
             ),
           ),
@@ -460,8 +465,6 @@ class _PeakHoursCard extends StatelessWidget {
   const _PeakHoursCard();
 
   static const _sessions = [
-    ('Lunch', '12:30 PM – 1:30 PM'),
-    ('Break', '3:00 PM – 4:00 PM'),
     ('Evening', '8:00 PM – 9:00 PM'),
   ];
 

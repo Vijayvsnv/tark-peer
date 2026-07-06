@@ -48,4 +48,5 @@ flutter:
   assets:
     - .env
     - assets/logos/
+    - assets/tark_peer_icon.png
     - assets/Tark-pear-logo-change.png

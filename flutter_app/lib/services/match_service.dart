@@ -68,7 +68,7 @@ class MatchService {
       filter.toQuery().forEach((k, v) => params[k] = v.toString());
     }
     final uri = Uri.parse(kWsUrl).replace(queryParameters: params);
-    debugPrint('[MatchService] WS connecting: $uri');
+    debugPrint('[MatchService] WS connecting to: $kWsUrl');
     _ws = WebSocketChannel.connect(uri);
     await _ws!.ready;
     debugPrint('[MatchService] WS ready');

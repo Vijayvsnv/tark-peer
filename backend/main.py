@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import auth, call, match, profile
+from routers import auth, call, match, profile, room
 from services import redis_client
 from services.supabase_client import supabase_admin
 from services.supabase_realtime import broadcast
@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 # How often the expiry scanner wakes up.  15 s gives <= 15 s overrun on
 # call duration in the worst case, which is fine for a 30-min ceiling.
 _EXPIRY_SCAN_INTERVAL_S = 15
+
+# Room expiry scanner interval: 5 minutes is granular enough for 2-hour rooms.
+_ROOM_EXPIRY_SCAN_INTERVAL_S = 300
 
 
 async def _expire_one_room(channel_name: str):
@@ -77,6 +80,20 @@ async def message_cleanup():
             logger.warning("message cleanup failed: %r", e)
 
 
+async def room_expiry_scanner():
+    """
+    Forever-loop: every _ROOM_EXPIRY_SCAN_INTERVAL_S, find rooms whose
+    expires_at has passed and close them.  Safe to run on multiple backend
+    instances because the Supabase UPDATE is gated on status != 'ended'.
+    """
+    while True:
+        await asyncio.sleep(_ROOM_EXPIRY_SCAN_INTERVAL_S)
+        try:
+            await room.expire_old_rooms()
+        except Exception as e:
+            logger.warning("room expiry scanner tick failed: %r", e)
+
+
 async def call_expiry_scanner():
     """
     Forever-loop: every _EXPIRY_SCAN_INTERVAL_S, atomically claim every room
@@ -106,13 +123,15 @@ async def lifespan(app: FastAPI):
     await redis_client.clear_stale_state()
     scanner = asyncio.create_task(call_expiry_scanner())
     msg_cleaner = asyncio.create_task(message_cleanup())
+    room_expiry = asyncio.create_task(room_expiry_scanner())
     try:
         yield
     finally:
         scanner.cancel()
         msg_cleaner.cancel()
+        room_expiry.cancel()
         try:
-            await asyncio.gather(scanner, msg_cleaner, return_exceptions=True)
+            await asyncio.gather(scanner, msg_cleaner, room_expiry, return_exceptions=True)
         except (asyncio.CancelledError, Exception):
             pass
         await redis_client.close_redis()
@@ -123,15 +142,16 @@ app = FastAPI(title="Tark Peer API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(auth.router)
 app.include_router(profile.router)
 app.include_router(call.router)
 app.include_router(match.router)
+app.include_router(room.router)
 
 
 @app.get("/health")

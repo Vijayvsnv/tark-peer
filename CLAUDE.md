@@ -23,7 +23,7 @@ Tark Peer is an **English conversation practice app** with two main pillars:
 1. **Random voice calls** — match with a random stranger and practice speaking English over a live Agora RTC voice call.
 2. **English learning tools** — guided topic levels (Learn tab), games (vocabulary quiz, word scramble, fill in blanks, pronunciation challenge, dictation), and progress tracking.
 
-Additional social features: friend requests, direct friend-to-friend calls, real-time chat (24-hour ephemeral messages), and user presence.
+Additional social features: friend requests, direct friend-to-friend calls, real-time chat (24-hour ephemeral messages), user presence, and **group voice rooms** (private/public, 2–10 members, slot-based layout, Agora multi-user audio).
 
 **Tech Stack:**
 - Flutter (Android only) — mobile app
@@ -87,6 +87,7 @@ Additional social features: friend requests, direct friend-to-friend calls, real
 **Lifespan tasks (started on startup, cancelled on shutdown):**
 - `call_expiry_scanner` — runs every **15 seconds**, atomically claims rooms whose `end_time` has passed using a Lua script, broadcasts `call_ended` to `room:{channelName}`, closes `call_history` with `ended_by='timer'`, cleans Redis state.
 - `message_cleanup` — runs every **3600 seconds (1 hour)**, calls Supabase RPC `delete_expired_messages` to purge expired chat messages.
+- `room_expiry_scanner` — runs every **300 seconds (5 minutes)**, calls `room.expire_old_rooms()` to mark expired group rooms as `'ended'` and broadcast `room_ended`.
 
 **Startup sequence:**
 1. `redis_client.init_redis()` — connects to Redis
@@ -97,7 +98,7 @@ Additional social features: friend requests, direct friend-to-friend calls, real
 - `GET /health` — returns `{"status": "ok", "service": "tark-peer"}`
 - `GET /stats` — returns `{total_users, online, waiting, active_calls, offline}`. `online = waiting + active_rooms * 2`. Reads from Redis ZSET card counts.
 
-**Routers included:** `auth`, `profile`, `call`, `match`
+**Routers included:** `auth`, `profile`, `call`, `match`, `room`
 
 **CORS:** `allow_origins=["*"]`
 
@@ -133,9 +134,9 @@ Both verify against Supabase's auth service using the service key client.
 | Model | Fields |
 |---|---|
 | `UserProfile` | `id, name, age?, gender?, bio?, avatar_url?, is_premium=False, total_calls=0` |
-| `UpdateProfile` | `name?, age?, gender?, bio?` |
-| `PartnerInfo` | `name, age?, gender?, avatar_url?` |
-| `MatchEvent` | `type='matched', channel_name, agora_token, agora_uid, agora_app_id, partner: PartnerInfo` |
+| `UpdateProfile` | `name?, age?, gender?, bio?` — **backend schema only has 4 fields**; Flutter updates profiles directly via Supabase with 10 fields (see ProfileService below) |
+| `PartnerInfo` | `name, age?, gender?, avatar_url?, bio?, occupation?, sector?, country?, state?, mother_tongue?` — full profile sent in match payload |
+| `MatchEvent` | `type='matched', channel_name, agora_token, agora_uid, agora_app_id, partner_id, partner: PartnerInfo` |
 | `DirectCallBody` | `receiver_id` |
 | `CallEndEvent` | `channel_name, reason` |
 | `CallRateEvent` | `channel_name, rated_user_id, stars` |
@@ -158,7 +159,7 @@ All endpoints use `Authorization: Bearer <token>` header.
 |---|---|---|
 | `/profile/me` | GET | Returns caller's full profile row from `profiles` |
 | `/profile/me` | PUT | Updates profile fields (non-null only). Sets `updated_at = now()` |
-| `/profile/history` | GET | Returns last 50 `call_history` rows where caller is `user_a` or `user_b`, ordered by `started_at` DESC |
+| `/profile/history` | GET | Returns last 50 `call_history` rows where caller is `user_a` or `user_b`, ordered by `started_at` DESC. **Flutter does NOT use this endpoint** — it fetches call history directly from Supabase via `ProfileService.getCallHistory()` with a `.limit(10)` |
 | `/profile/{user_id}` | GET | Returns public profile (`id, name, age, gender, bio, avatar_url, is_premium`) for any user |
 
 ---
@@ -177,6 +178,30 @@ All endpoints use `Authorization: Bearer <token>` header.
 - `reason="timer"` → `ended_by="timer"`
 - `reason="disconnect"` → `ended_by="disconnect"`
 - anything else ("manual", "skip", "partner_left") → `ended_by="user_a"` if caller is `user_a` in Redis call_info, else `"user_b"`
+
+---
+
+### `backend/routers/room.py` — `/room` Router
+
+All endpoints use `Authorization: Bearer <token>` header.
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/room/create` | POST | Body: `{name, type, max_members}`. Creates room in Supabase, assigns host to slot 1, generates Agora token. Returns `RoomInfo`. One active room per user enforced (409 if already in one). |
+| `/room/join` | POST | Body: `{code}`. Finds lowest free slot (1..max_members), inserts member row, returns `RoomInfo`. 409 if full or already in room. |
+| `/room/leave` | POST | Body: `{room_id}`. Sets `is_active=false`, records `left_at`. If host and last member, marks room `ended`. Broadcasts `member_left` to `room:{code}` Realtime channel. |
+| `/room/public` | GET | Returns list of `active` + `public` rooms with member counts. Excludes full rooms. |
+| `/room/{code}` | GET | Returns current room state (members + slots). Used for rejoin. |
+
+**Key design decisions:**
+- Agora channel name: `room_{code}` (e.g., `room_TRK4X2`)
+- Code generation: `secrets.choice` over A-Z0-9, 6 chars, up to 10 uniqueness retries
+- `_fetch_members_with_profiles`: 2-step batch (members → profiles), sorted by `slot_number`
+- `expire_old_rooms()`: queries `expires_at < now()`, updates `status='ended'`, broadcasts `room_ended`
+- Rate limit: 10 room creations per hour per user (`rl:room_create:{user_id}`)
+
+**Realtime topics used:**
+- `room:{code}` — broadcasts `member_left`, `room_ended` events
 
 ---
 
@@ -338,8 +363,9 @@ flutter_app/lib/
 │   ├── constants.dart             — kBackendUrl, kWsUrl, kMaxCallDurationSeconds
 │   └── theme.dart                 — Complete design system: colors, ThemeData
 ├── models/
-│   ├── match_event.dart           — MatchEvent, PartnerInfo (from JSON)
+│   ├── match_event.dart           — MatchEvent (channelName, agoraToken, agoraUid, agoraAppId, partnerId, partner), PartnerInfo (name, age?, gender?, avatarUrl?, bio?, occupation?, sector?, country?, state?, motherTongue?)
 │   ├── match_filter.dart          — MatchFilter (gender, ageRange, minRating, maxRating)
+│   ├── room_models.dart           — RoomMember, RoomInfo, PublicRoom
 │   └── user_profile.dart          — UserProfile (full profile model)
 ├── data/
 │   ├── avatars.dart               — kPresetAvatars (DiceBear URLs list)
@@ -355,6 +381,7 @@ flutter_app/lib/
 │   ├── message_service.dart       — fetchMessages, sendMessage, markRead, subscribeToMessages
 │   ├── presence_service.dart      — setOnline/setOffline/setInCall, watchPresence
 │   ├── direct_call_service.dart   — singleton, subscribe/unsubscribe incoming calls, initiateCall
+│   ├── room_service.dart          — createRoom, joinRoom, leaveRoom, getPublicRooms, getRoomMembers
 │   ├── rating_service.dart        — POST /call/rate wrapper
 │   ├── update_service.dart        — GitHub releases version check + APK download
 │   ├── topic_progress_service.dart — SharedPrefs-backed topic practiced tracking
@@ -387,6 +414,12 @@ flutter_app/lib/
 │   ├── chat/
 │   │   ├── chat_list_screen.dart
 │   │   └── chat_screen.dart
+│   ├── rooms/
+│   │   ├── rooms_screen.dart       — Landing page (3 option cards)
+│   │   ├── create_room_screen.dart — Name + type + size picker
+│   │   ├── join_room_screen.dart   — 6-char code input
+│   │   ├── public_rooms_screen.dart — Public room list
+│   │   └── room_lobby_screen.dart  — Live room lobby (member grid + audio)
 │   └── games/
 │       ├── vocabulary_quiz_screen.dart
 │       ├── word_scramble_screen.dart
@@ -427,6 +460,11 @@ flutter_app/lib/
 | `/games/fill?level=N` | `FillBlanksScreen` | Fill in blanks, level 1–3 |
 | `/games/pronun?level=N` | `PronunciationChallengeScreen` | Say the word, mic checks. Level 1–3 |
 | `/games/dict?level=N` | `DictationScreen` | Hear TTS, type what you hear. Level 1–3 |
+| `/rooms` | `RoomsScreen` | Landing: Create / Join with Code / Public Rooms |
+| `/rooms/create` | `CreateRoomScreen` | Room name, type (private/public), size (2/4 free, 6/8/10 premium locked) |
+| `/rooms/join` | `JoinRoomScreen` | 6-char uppercase code input |
+| `/rooms/public` | `PublicRoomsScreen` | List of active public rooms with join button |
+| `/rooms/lobby` | `RoomLobbyScreen` | Live room: member slot grid, speaking glow, mic/speaker controls. **`state.extra` = `RoomInfo` (required)** |
 
 ---
 
@@ -563,16 +601,18 @@ All game screens:
 Thin wrapper around `Supabase.instance.client.auth`. Methods: `signUp`, `signIn`, `signOut`. Properties: `currentUser`, `accessToken`, `isLoggedIn`, `authStream`.
 
 ### ProfileService
-Uses Supabase client (anon key). All methods query `profiles` table directly.
+Uses Supabase client (anon key). All methods query Supabase directly — **does not call the backend `/profile/*` endpoints**.
 
-- `getCallHistory()` — 4-step process to avoid Supabase FK join issues:
+- `updateProfile(name?, age?, gender?, bio?, occupation?, sector?, country?, state?, motherTongue?, avatarUrl?)` — updates `profiles` table directly via Supabase (10 fields), NOT the backend `PUT /profile/me` (which only accepts 4 fields). Sets `updated_at` locally.
+
+- `getCallHistory()` — **fetches last 10 calls directly from Supabase** (`.limit(10)`), not from backend `/profile/history` endpoint. 4-step process to avoid Supabase FK join issues:
   1. Fetch call rows (last 10, user is `user_a` or `user_b`)
   2. Collect unique partner IDs
   3. Batch fetch partner profiles (`inFilter`)
   4. Merge using spread operator (NOT mutation — Supabase returns immutable maps)
   Returns rows with `user_b_profile` or `user_a_profile` keys added.
 
-- `getCallStats()` — computes entirely client-side from raw call rows:
+- `getCallStats()` — fetches **ALL** call rows (no limit) from Supabase directly, computes entirely client-side:
   - Total calls, total seconds, longest call
   - Streak (consecutive days with ≥1 call, checks today or yesterday as start)
   - This week / last week call counts (ISO week, Monday start)
@@ -618,6 +658,15 @@ Agora RTC engine wrapper. Key behaviors:
 - Subscribes to Realtime `direct:{userId}` channel, event `incoming_call`.
 - `initiateCall(receiverId)` → POST `/call/direct` → returns Agora params for caller.
 - `subscribe()` / `unsubscribe()` — called from HomeScreen lifecycle.
+
+### RoomService
+HTTP calls to backend room endpoints. All methods use `AuthService().accessToken` bearer token.
+
+- `createRoom({name, type, maxMembers})` → POST `/room/create` → returns `RoomInfo`
+- `joinRoom(code)` → POST `/room/join` → returns `RoomInfo`
+- `leaveRoom(roomId)` → POST `/room/leave` (fire-and-forget on cleanup)
+- `getPublicRooms()` → GET `/room/public` → returns `List<PublicRoom>` (returns `[]` on error, never throws)
+- `getRoomMembers(roomId)` → Supabase direct 2-step batch fetch (same immutable-map-spread pattern as `getCallHistory`): fetch `room_members WHERE is_active=true`, then batch-fetch `profiles`, merge → returns `List<RoomMember>` sorted by `slot_number`
 
 ### RatingService
 - POST `/call/rate` with `{channel_name, rated_user_id, stars}`.
@@ -824,6 +873,39 @@ Cleanup: Supabase RPC `delete_expired_messages` called by backend hourly.
 
 Upserted by client directly (anon key with RLS to own row only).
 
+### `rooms`
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | PK |
+| `code` | text | 6-char A-Z0-9, unique |
+| `name` | text | Room display name |
+| `type` | text | `private` / `public` |
+| `max_members` | int | CHECK: 2, 4, 6, 8, 10 |
+| `host_id` | uuid | FK → auth.users |
+| `status` | text | `active` / `ended` |
+| `created_at` | timestamptz | |
+| `expires_at` | timestamptz | 2 hours from creation — backend scanner marks ended |
+
+RLS: SELECT open to all authenticated. UPDATE restricted to host. INSERT/DELETE via service key only (backend).
+
+### `room_members`
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | PK |
+| `room_id` | uuid | FK → rooms |
+| `user_id` | uuid | FK → auth.users |
+| `slot_number` | int | 1..max_members. Partial unique index enforces no duplicate active slots |
+| `agora_uid` | bigint | Deterministic MD5-based UID for Agora channel |
+| `is_active` | boolean | false when member leaves |
+| `joined_at` | timestamptz | |
+| `left_at` | timestamptz | Set on leave |
+
+Partial unique indexes:
+- `room_members_active_slot` on `(room_id, slot_number) WHERE is_active = true`
+- `room_members_active_user` on `(room_id, user_id) WHERE is_active = true`
+
+In Realtime publication (`supabase_realtime`). Flutter subscribes to `room_members` postgres changes to update the member grid live.
+
 ---
 
 ## 13. Key Features — Implementation Details
@@ -1016,5 +1098,8 @@ Both must stay in sync. If changed, update both places.
 ### 14. Redis clear_stale_state on Startup
 Backend clears ALL transient Redis keys (`waiting_queue`, `active_rooms`, `user_room:*`, `partner:*`, `call_info:*`) on startup. This means any in-progress calls or queued users from a previous process will be silently dropped on restart. Acceptable trade-off for correctness.
 
-### 15. Chat Messages — 24h Expiry
+### 15. Room Multi-User Speaking Detection
+`CallService.joinCall` now accepts an optional `onVolumesChanged: Function(Map<int, int>)?` callback. In rooms, `uid=0` is the local user. `RoomLobbyScreen` pre-populates `_uidToSlot[0] = widget.room.mySlot` so the local user's slot box also glows. Volume threshold for speaking is `> 25`. The existing `CallScreen` usage is unchanged — `onVolumesChanged` is optional and defaults to null.
+
+### 16. Chat Messages — 24h Expiry
 Messages have `expires_at` set server-side (24h from creation). Queries filter `expires_at > now()`. Backend runs `delete_expired_messages` Supabase RPC hourly to actually purge rows.

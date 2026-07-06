@@ -168,6 +168,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         label: 'Calls',
                         onTap: () => context.push('/calls'),
                       )),
+                      const SizedBox(width: 12),
+                      Expanded(child: _navCard(
+                        context,
+                        icon: Icons.meeting_room_outlined,
+                        label: 'Rooms',
+                        onTap: () => context.push('/rooms'),
+                      )),
                     ],
                   ),
                   const SizedBox(height: 32),

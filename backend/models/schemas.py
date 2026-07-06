@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Optional, Literal
 
 
 class UserProfile(BaseModel):
@@ -14,10 +14,10 @@ class UserProfile(BaseModel):
 
 
 class UpdateProfile(BaseModel):
-    name: Optional[str] = None
-    age: Optional[int] = None
-    gender: Optional[str] = None
-    bio: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    age: Optional[int] = Field(None, ge=13, le=150)
+    gender: Optional[Literal["male", "female", "other"]] = None
+    bio: Optional[str] = Field(None, max_length=500)
 
 
 class PartnerInfo(BaseModel):
@@ -37,15 +37,15 @@ class MatchEvent(BaseModel):
 
 
 class DirectCallBody(BaseModel):
-    receiver_id: str
+    receiver_id: str = Field(..., min_length=1)
 
 
 class CallEndEvent(BaseModel):
-    channel_name: str
-    reason: str
+    channel_name: str = Field(..., min_length=1, max_length=200)
+    reason: str = Field(..., min_length=1, max_length=50)
 
 
 class CallRateEvent(BaseModel):
-    channel_name: str
-    rated_user_id: str
-    stars: int
+    channel_name: str = Field(..., min_length=1, max_length=200)
+    rated_user_id: str = Field(..., min_length=1)
+    stars: int = Field(..., ge=1, le=5)

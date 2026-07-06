@@ -54,24 +54,42 @@ class _SplashScreenState extends State<SplashScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Image.asset(
-              'assets/Tark-pear-logo-change.png',
-              width: 340,
+              'assets/tark_peer_icon.png',
+              width: 96,
+              height: 96,
               fit: BoxFit.contain,
             ),
-            const Text(
-              'Welcome to Tark Peer',
-              style: TextStyle(
-                color: kTextPrimary,
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
+            const SizedBox(height: 20),
+            RichText(
+              text: const TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Tark',
+                    style: TextStyle(
+                      color: kAccent,
+                      fontSize: 34,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' Peer',
+                    style: TextStyle(
+                      color: kPrimary,
+                      fontSize: 34,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 6),
             const Text(
               'Talk. Connect. Grow.',
-              style: TextStyle(color: kTextSecondary, fontSize: 14),
+              style: TextStyle(color: kTextSecondary, fontSize: 14, letterSpacing: 0.2),
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 52),
             const CircularProgressIndicator(color: kPrimary),
           ],
         ),

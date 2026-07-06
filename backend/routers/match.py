@@ -253,6 +253,12 @@ async def websocket_match(
         await websocket.close(code=4001)
         return
 
+    # Rate limit: max 20 WS connections per user per minute (allows fast
+    # rematching while blocking connection-flood abuse)
+    if not await redis_client.check_rate_limit(f"ws_match:{user_id}", 20, 60):
+        await websocket.close(code=4029)
+        return
+
     await websocket.accept()
 
     existing_room = await redis_client.get_user_room(user_id)

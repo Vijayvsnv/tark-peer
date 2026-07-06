@@ -27,6 +27,12 @@ import 'screens/games/word_scramble_screen.dart';
 import 'screens/games/fill_blanks_screen.dart';
 import 'screens/home/topic_level_screen.dart';
 import 'screens/onboarding/onboarding_screen.dart';
+import 'screens/rooms/rooms_screen.dart';
+import 'screens/rooms/create_room_screen.dart';
+import 'screens/rooms/join_room_screen.dart';
+import 'screens/rooms/public_rooms_screen.dart';
+import 'screens/rooms/room_lobby_screen.dart';
+import 'models/room_models.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -110,6 +116,14 @@ final _router = GoRouter(
     GoRoute(
       path: '/learn/level',
       builder: (_, state) => TopicLevelScreen(level: state.extra as TopicLevel),
+    ),
+    GoRoute(path: '/rooms', builder: (_, __) => const RoomsScreen()),
+    GoRoute(path: '/rooms/create', builder: (_, __) => const CreateRoomScreen()),
+    GoRoute(path: '/rooms/join', builder: (_, __) => const JoinRoomScreen()),
+    GoRoute(path: '/rooms/public', builder: (_, __) => const PublicRoomsScreen()),
+    GoRoute(
+      path: '/rooms/lobby',
+      builder: (_, state) => RoomLobbyScreen(room: state.extra as RoomInfo),
     ),
   ],
 );
