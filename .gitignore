@@ -56,4 +56,6 @@ desktop.ini
 
 # Claude Code
 .claude/settings.local.json
-backend/*.txt
+
+# Firebase service account — private key, never commit
+backend/firebase-service-account.json
