@@ -482,7 +482,7 @@ async def leave_room(body: RoomLeaveBody, authorization: str = Header(...)):
         # No one left — end the room.
         try:
             supabase_admin.table("rooms").update(
-                {"status": "ended", "ended_at": now_iso}
+                {"status": "ended"}
             ).eq("id", room_id).neq("status", "ended").execute()
         except Exception as exc:
             logger.warning("room end failed (room=%s): %r", room_id, exc)
@@ -644,7 +644,7 @@ async def expire_old_rooms() -> None:
         room_id: str = room["id"]
         try:
             supabase_admin.table("rooms").update(
-                {"status": "ended", "ended_at": now_iso}
+                {"status": "ended"}
             ).eq("id", room_id).neq("status", "ended").execute()
         except Exception as exc:
             logger.warning(
