@@ -267,8 +267,8 @@ async def create_room(body: RoomCreateBody, authorization: str = Header(...)):
                     "name": body.name,
                     "type": body.type,
                     "max_members": body.max_members,
-                    "status": "waiting",
-                    "created_by": user_id,
+                    "status": "active",
+                    "host_id": user_id,
                     "expires_at": expires_at,
                 }
             )
