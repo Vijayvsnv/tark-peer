@@ -1,5 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/constants.dart';
+import 'auth_service.dart';
 
 class MessageService {
   final _db = Supabase.instance.client;
@@ -33,6 +37,19 @@ class MessageService {
       'receiver_id': receiverId,
       'content': content,
     });
+
+    // Push notification to receiver (fire-and-forget)
+    _notifyMessage(receiverId, content);
+  }
+
+  void _notifyMessage(String receiverId, String content) {
+    final token = AuthService().accessToken;
+    if (token == null) return;
+    http.post(
+      Uri.parse('$kBackendUrl/notify/message'),
+      headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      body: jsonEncode({'receiver_id': receiverId, 'preview': content}),
+    ).catchError((_) {});
   }
 
   Future<void> markRead(String friendId) async {

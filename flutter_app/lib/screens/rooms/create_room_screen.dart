@@ -15,6 +15,7 @@ class CreateRoomScreen extends StatefulWidget {
 class _CreateRoomScreenState extends State<CreateRoomScreen> {
   final _roomService = RoomService();
   final _nameCtrl = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
   String _type = 'private';
   int _maxMembers = 2;
   bool _loading = false;
@@ -29,17 +30,11 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   }
 
   Future<void> _create() async {
-    final name = _nameCtrl.text.trim();
-    if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Room name cannot be empty'), backgroundColor: Colors.red),
-      );
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
       final room = await _roomService.createRoom(
-        name: name,
+        name: _nameCtrl.text.trim(),
         type: _type,
         maxMembers: _maxMembers,
       );
@@ -47,7 +42,10 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -74,102 +72,111 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 8),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 8),
 
-            // Room Name
-            const Text('Room Name', style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _nameCtrl,
-              maxLength: 50,
-              decoration: InputDecoration(
-                hintText: 'e.g. Vijay\'s English Circle',
-                hintStyle: const TextStyle(color: kTextMuted),
-                filled: true,
-                fillColor: kSurface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: kBorder),
+              const Text('Room Name', style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _nameCtrl,
+                maxLength: 50,
+                validator: (v) => v!.trim().isEmpty ? 'Room name is required' : null,
+                decoration: InputDecoration(
+                  hintText: 'e.g. Vijay\'s English Circle',
+                  hintStyle: const TextStyle(color: kTextMuted),
+                  filled: true,
+                  fillColor: kSurface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: kBorder),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: kBorder),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: kPrimary, width: 1.5),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: kDanger, width: 1.5),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: kDanger, width: 1.5),
+                  ),
+                  counterStyle: const TextStyle(color: kTextMuted, fontSize: 11),
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: kBorder),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: kPrimary, width: 1.5),
-                ),
-                counterStyle: const TextStyle(color: kTextMuted, fontSize: 11),
               ),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // Room Type
-            const Text('Room Type', style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _TypeChip(
-                  label: '🔒 Private',
-                  subtitle: 'Join via code only',
-                  selected: _type == 'private',
-                  onTap: () => setState(() => _type = 'private'),
-                ),
-                const SizedBox(width: 12),
-                _TypeChip(
-                  label: '🌐 Public',
-                  subtitle: 'Listed in public rooms',
-                  selected: _type == 'public',
-                  onTap: () => setState(() => _type = 'public'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
+              const Text('Room Type', style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _TypeChip(
+                    label: '🔒 Private',
+                    subtitle: 'Join via code only',
+                    selected: _type == 'private',
+                    onTap: () => setState(() => _type = 'private'),
+                  ),
+                  const SizedBox(width: 12),
+                  _TypeChip(
+                    label: '🌐 Public',
+                    subtitle: 'Listed in public rooms',
+                    selected: _type == 'public',
+                    onTap: () => setState(() => _type = 'public'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
 
-            // Room Size
-            const Text('Room Size', style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
-            const SizedBox(height: 4),
-            const Text(
-              '6, 8, 10 members — Premium (coming soon)',
-              style: TextStyle(color: kTextMuted, fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                ..._freeSizes.map((s) => _SizeChip(
-                  size: s,
-                  selected: _maxMembers == s,
-                  locked: false,
-                  onTap: () => setState(() => _maxMembers = s),
-                )),
-                ..._premiumSizes.map((s) => _SizeChip(
-                  size: s,
-                  selected: false,
-                  locked: true,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Premium feature — coming soon!'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  },
-                )),
-              ],
-            ),
-            const SizedBox(height: 36),
+              const Text('Room Size', style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+              const SizedBox(height: 4),
+              const Text(
+                '6, 8, 10 members — Premium (coming soon)',
+                style: TextStyle(color: kTextMuted, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  ..._freeSizes.map((s) => _SizeChip(
+                    size: s,
+                    selected: _maxMembers == s,
+                    locked: false,
+                    onTap: () => setState(() => _maxMembers = s),
+                  )),
+                  ..._premiumSizes.map((s) => _SizeChip(
+                    size: s,
+                    selected: false,
+                    locked: true,
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Premium feature — coming soon!'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                  )),
+                ],
+              ),
+              const SizedBox(height: 36),
 
-            CustomButton(
-              label: 'Create Room',
-              isLoading: _loading,
-              onPressed: _create,
-            ),
-          ],
+              CustomButton(
+                label: 'Create Room',
+                isLoading: _loading,
+                onPressed: _create,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -245,11 +252,7 @@ class _SizeChip extends StatelessWidget {
         width: 64,
         height: 64,
         decoration: BoxDecoration(
-          color: selected
-              ? kPrimary
-              : locked
-                  ? kSurface
-                  : kSurface,
+          color: selected ? kPrimary : kSurface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: selected ? kPrimary : kBorder,

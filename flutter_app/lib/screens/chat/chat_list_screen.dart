@@ -54,7 +54,26 @@ class _ChatListScreenState extends State<ChatListScreen> {
       if (mounted) setState(() => _lastMessages[pid] = msg);
     }
 
+    // Sort by last message timestamp — most recent first
+    if (mounted) {
+      setState(() {
+        _friends.sort((a, b) {
+          final pidA = _partnerId(a, myId);
+          final pidB = _partnerId(b, myId);
+          final msgA = _lastMessages[pidA];
+          final msgB = _lastMessages[pidB];
+          if (msgA == null && msgB == null) return 0;
+          if (msgA == null) return 1;
+          if (msgB == null) return -1;
+          final timeA = msgA['created_at'] as String? ?? '';
+          final timeB = msgB['created_at'] as String? ?? '';
+          return timeB.compareTo(timeA);
+        });
+      });
+    }
+
     final ids = friends.map((f) => _partnerId(f, myId)).toList();
+    _presenceSub?.cancel();
     _presenceSub = _presenceService.watchPresence(ids).listen((map) {
       if (mounted) setState(() => _presenceMap = map);
     });
@@ -200,7 +219,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         tooltip: 'Call friend',
                         onPressed: () => _callFriend(context, partnerId, name, avatarUrl),
                       ),
-                      onTap: () => context.push('/chat/$partnerId'),
+                      onTap: () async {
+                        await context.push('/chat/$partnerId');
+                        if (mounted) _load();
+                      },
                     );
                   },
                 ),

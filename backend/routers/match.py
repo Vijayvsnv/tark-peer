@@ -38,7 +38,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from core.config import settings
-from services import redis_client
+from services import notification_service, redis_client
 from services.agora_service import generate_token
 from services.supabase_client import supabase_admin
 from services.supabase_realtime import broadcast
@@ -353,6 +353,19 @@ async def _matcher_loop(user_id: str, websocket: WebSocket, user_filter: Optiona
                 _send_ws(partner_ws, {"type": "matched", **payload_partner})
                 if partner_ws else asyncio.sleep(0),
             )
+
+            # FCM push — wakes both users if app was backgrounded while waiting
+            channel_name = payload_me["channel_name"]
+            asyncio.create_task(notification_service.send_to_user(
+                user_id,
+                title="🎤 Match found! Your partner is waiting",
+                data={"type": "matched", "channel_name": channel_name},
+            ))
+            asyncio.create_task(notification_service.send_to_user(
+                partner_id,
+                title="🎤 Match found! Your partner is waiting",
+                data={"type": "matched", "channel_name": channel_name},
+            ))
             return
 
     except asyncio.CancelledError:

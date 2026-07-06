@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -78,7 +77,6 @@ class _VocabularyQuizScreenState extends State<VocabularyQuizScreen>
   String? _selected;
   bool _answered = false;
   bool _done = false;
-  Timer? _nextTimer;
 
   late AnimationController _cardCtrl;
   late Animation<double> _cardAnim;
@@ -99,7 +97,6 @@ class _VocabularyQuizScreenState extends State<VocabularyQuizScreen>
 
   @override
   void dispose() {
-    _nextTimer?.cancel();
     _cardCtrl.dispose();
     super.dispose();
   }
@@ -111,7 +108,6 @@ class _VocabularyQuizScreenState extends State<VocabularyQuizScreen>
       _answered = true;
       if (option == _questions[_qIndex].correct) _score++;
     });
-    _nextTimer = Timer(const Duration(milliseconds: 900), _next);
   }
 
   void _next() {
@@ -247,6 +243,25 @@ class _VocabularyQuizScreenState extends State<VocabularyQuizScreen>
             )).toList(),
           ),
         ),
+        if (_answered)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _next,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kPrimary,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: Text(
+                  _qIndex + 1 >= _questions.length ? 'See Results' : 'Next Question →',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }

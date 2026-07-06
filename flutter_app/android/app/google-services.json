@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "215060507142",
+    "project_id": "tara-peer",
+    "storage_bucket": "tara-peer.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:215060507142:android:be52675abc076ac34bf187",
+        "android_client_info": {
+          "package_name": "com.tarkpeer.tark_peer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDb0DEw1yVxyD8eJDLJ9KBtZV7Mba1u_zI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

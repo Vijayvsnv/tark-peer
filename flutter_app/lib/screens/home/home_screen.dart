@@ -14,6 +14,8 @@ import '../../services/friend_service.dart';
 import '../../services/home_hints_service.dart';
 import '../../services/profile_service.dart';
 import '../../services/presence_service.dart';
+import '../../services/fcm_service.dart';
+import '../../services/notification_service.dart';
 import '../../services/update_service.dart';
 import '../../widgets/filter_bottom_sheet.dart';
 import '../../widgets/user_avatar.dart';
@@ -28,7 +30,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final _auth = AuthService();
   final _profileService = ProfileService();
   final _friendService = FriendService();
@@ -54,10 +56,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _pulse = Tween<double>(begin: 1.0, end: 1.08).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
+    WidgetsBinding.instance.addObserver(this);
     _hints.ensureLoaded();
     _loadAll();
     _statsTimer = Timer.periodic(const Duration(seconds: 15), (_) => _loadWaiting());
     Future.delayed(const Duration(seconds: 2), _checkUpdate);
+    FcmService.instance.init();
     _presenceService.setOnline();
     DirectCallService.instance.subscribe();
     _incomingCallSub = DirectCallService.instance.incomingCalls.listen(_onIncomingCall);
@@ -92,7 +96,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   Future<void> _loadPendingCount() async {
     try {
-      final count = await _friendService.getPendingCount();
+      final count = await NotificationService.instance.getUnreadCount();
       if (mounted) setState(() => _pendingCount = count);
     } catch (_) {}
   }
@@ -124,6 +128,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       builder: (_) => _IncomingCallDialog(
         callerName: callerName,
         callerAvatar: callerAvatar,
+        callerId: data['partner_id'] as String? ?? '',
+        onAutoDeclined: () => NotificationService.instance.insertMissedCall(
+          callerName: callerName,
+          callerId: data['partner_id'] as String? ?? '',
+          callerAvatar: callerAvatar,
+        ),
       ),
     );
 
@@ -143,7 +153,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _presenceService.setOffline();
+    } else if (state == AppLifecycleState.resumed) {
+      _presenceService.setOnline();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _incomingCallSub?.cancel();
     DirectCallService.instance.unsubscribe();
     _presenceService.setOffline();
@@ -153,7 +173,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _showNotifications() async {
-    final requests = await _friendService.getPendingRequests();
+    final notifications = await NotificationService.instance.getAll();
     if (!mounted) return;
     showModalBottomSheet(
       context: context,
@@ -163,7 +183,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => _NotificationsSheet(
-        requests: requests,
+        notifications: notifications,
         friendService: _friendService,
         onDone: () {
           _loadPendingCount();
@@ -202,10 +222,26 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           onTap: () => context.push('/profile'),
           child: Padding(
             padding: const EdgeInsets.only(left: 12),
-            child: UserAvatar(
-              name: _profile?.name ?? 'U',
-              imageUrl: _profile?.avatarUrl,
-              radius: 18,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                UserAvatar(
+                  name: _profile?.name ?? 'U',
+                  imageUrl: _profile?.avatarUrl,
+                  radius: 18,
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 4, height: 4, decoration: const BoxDecoration(color: kPrimary, shape: BoxShape.circle)),
+                    const SizedBox(width: 3),
+                    Container(width: 4, height: 4, decoration: const BoxDecoration(color: kPrimary, shape: BoxShape.circle)),
+                    const SizedBox(width: 3),
+                    Container(width: 4, height: 4, decoration: const BoxDecoration(color: kPrimary, shape: BoxShape.circle)),
+                  ],
+                ),
+              ],
             ),
           ),
         ),
@@ -312,8 +348,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                SizedBox(height: profileIncomplete ? 12 : 20),
                 const Text(
                   'PRACTICE WITH HUMANS',
                   style: TextStyle(
@@ -323,54 +359,40 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     letterSpacing: 1.3,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 20),
+                ValueListenableBuilder<bool>(
+                  valueListenable: _hints.tarkSeen,
+                  builder: (_, seen, __) => seen
+                      ? const SizedBox.shrink()
+                      : const Padding(
+                          padding: EdgeInsets.only(bottom: 8),
+                          child: _TarkHereHint(),
+                        ),
+                ),
+                AnimatedBuilder(
+                  animation: _pulse,
+                  builder: (_, child) => Transform.scale(scale: _pulse.value, child: child),
+                  child: _FindPartnerButton(onTap: () async {
+                    _hints.markTarkSeen();
+                    final filter = await showFilterSheet(context);
+                    if (filter != null && context.mounted) {
+                      context.push('/matching', extra: filter);
+                    }
+                  }),
+                ),
+                const SizedBox(height: 20),
                 const Text(
-                  'Connect with real people and practice',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: kTextSecondary, fontSize: 15),
+                  'Tap to find a random partner',
+                  style: TextStyle(color: kTextSecondary, fontSize: 14),
                 ),
-                const SizedBox(height: 28),
-                const Spacer(),
-                Center(
-                  child: Column(
-                    children: [
-                      ValueListenableBuilder<bool>(
-                        valueListenable: _hints.tarkSeen,
-                        builder: (_, seen, __) => seen
-                            ? const SizedBox(height: 0)
-                            : const Padding(
-                                padding: EdgeInsets.only(bottom: 8),
-                                child: _TarkHereHint(),
-                              ),
-                      ),
-                      AnimatedBuilder(
-                        animation: _pulse,
-                        builder: (_, child) => Transform.scale(scale: _pulse.value, child: child),
-                        child: _FindPartnerButton(onTap: () async {
-                          _hints.markTarkSeen();
-                          final filter = await showFilterSheet(context);
-                          if (filter != null && context.mounted) {
-                            context.push('/matching', extra: filter);
-                          }
-                        }),
-                      ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Tap to find a random partner',
-                        style: TextStyle(color: kTextSecondary, fontSize: 14),
-                      ),
-                      const SizedBox(height: 16),
-                      _LiveStatsRow(
-                        waiting: _waiting,
-                        online: _online,
-                        inCall: _inCall,
-                      ),
-                      const SizedBox(height: 16),
-                      const _PeakHoursCard(),
-                      const SizedBox(height: 20),
-                    ],
-                  ),
+                const SizedBox(height: 14),
+                _LiveStatsRow(
+                  waiting: _waiting,
+                  online: _online,
+                  inCall: _inCall,
                 ),
+                const SizedBox(height: 14),
+                const _PeakHoursCard(),
               ],
             ),
           ),
@@ -488,6 +510,7 @@ class _PeakHoursCard extends StatelessWidget {
               borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
             ),
             child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.schedule_outlined, size: 18, color: cardColor),
                 SizedBox(width: 8),
@@ -517,18 +540,17 @@ class _PeakHoursCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  SizedBox(
-                    width: 76,
-                    child: Text(
-                      _sessions[i].$1,
-                      style: const TextStyle(
-                        color: kTextPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
+                  Text(
+                    _sessions[i].$1,
+                    style: const TextStyle(
+                      color: kTextPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
+                  const SizedBox(width: 12),
                   Text(
                     _sessions[i].$2,
                     style: const TextStyle(
@@ -550,6 +572,7 @@ class _PeakHoursCard extends StatelessWidget {
             ),
             child: const Text(
               'More users are active during these hours',
+              textAlign: TextAlign.center,
               style: TextStyle(
                 color: kTextSecondary,
                 fontSize: 12,
@@ -860,12 +883,12 @@ class _UpdateDialogState extends State<_UpdateDialog> {
 // ── Notifications Sheet ───────────────────────────────────────────────────────
 
 class _NotificationsSheet extends StatefulWidget {
-  final List<Map<String, dynamic>> requests;
+  final List<Map<String, dynamic>> notifications;
   final FriendService friendService;
   final VoidCallback onDone;
 
   const _NotificationsSheet({
-    required this.requests,
+    required this.notifications,
     required this.friendService,
     required this.onDone,
   });
@@ -875,77 +898,231 @@ class _NotificationsSheet extends StatefulWidget {
 }
 
 class _NotificationsSheetState extends State<_NotificationsSheet> {
-  late List<Map<String, dynamic>> _requests;
+  late List<Map<String, dynamic>> _items;
 
   @override
   void initState() {
     super.initState();
-    _requests = List.from(widget.requests);
+    _items = List.from(widget.notifications);
+    NotificationService.instance.markAllRead();
   }
 
-  Future<void> _accept(String id, int index) async {
-    await widget.friendService.acceptRequest(id);
-    setState(() => _requests.removeAt(index));
-    if (_requests.isEmpty) widget.onDone();
+  String _timeAgo(String? iso) {
+    if (iso == null) return '';
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return '';
+    final d = DateTime.now().difference(dt);
+    if (d.inSeconds < 60) return 'just now';
+    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
+    if (d.inHours < 24) return '${d.inHours}h ago';
+    return '${d.inDays}d ago';
   }
 
-  Future<void> _reject(String id, int index) async {
-    await widget.friendService.rejectRequest(id);
-    setState(() => _requests.removeAt(index));
-    if (_requests.isEmpty) widget.onDone();
+  Future<void> _acceptFriend(Map<String, dynamic> notif) async {
+    final data = (notif['data'] as Map?)?.cast<String, dynamic>() ?? {};
+    final fid = data['friendship_id'] as String?;
+    if (fid == null) return;
+    await widget.friendService.acceptRequest(fid);
+    await NotificationService.instance.deleteById(notif['id'] as String);
+    setState(() => _items.removeWhere((n) => n['id'] == notif['id']));
+  }
+
+  Future<void> _rejectFriend(Map<String, dynamic> notif) async {
+    final data = (notif['data'] as Map?)?.cast<String, dynamic>() ?? {};
+    final fid = data['friendship_id'] as String?;
+    if (fid == null) return;
+    await widget.friendService.rejectRequest(fid);
+    await NotificationService.instance.deleteById(notif['id'] as String);
+    setState(() => _items.removeWhere((n) => n['id'] == notif['id']));
   }
 
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
-      initialChildSize: 0.5,
+      initialChildSize: 0.55,
       minChildSize: 0.3,
-      maxChildSize: 0.8,
+      maxChildSize: 0.88,
       expand: false,
       builder: (_, ctrl) => Column(
         children: [
           const SizedBox(height: 12),
-          Container(width: 40, height: 4, decoration: BoxDecoration(color: kTextSecondary.withOpacity(0.4), borderRadius: BorderRadius.circular(2))),
+          Container(
+            width: 40, height: 4,
+            decoration: BoxDecoration(
+              color: kTextSecondary.withOpacity(0.35),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
           const SizedBox(height: 16),
-          const Text('Friend Requests', style: TextStyle(color: kTextPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Expanded(
-            child: _requests.isEmpty
-                ? const Center(child: Text('No pending requests', style: TextStyle(color: kTextSecondary)))
-                : ListView.builder(
-                    controller: ctrl,
-                    itemCount: _requests.length,
-                    itemBuilder: (_, i) {
-                      final req = _requests[i];
-                      final requester = req['requester'] as Map<String, dynamic>? ?? {};
-                      final name = requester['name'] as String? ?? 'User';
-                      final avatar = requester['avatar_url'] as String?;
-                      final reqId = req['id'] as String;
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: kPrimary,
-                          backgroundImage: avatar != null ? NetworkImage(avatar) : null,
-                          child: avatar == null ? Text(name[0].toUpperCase(), style: const TextStyle(color: Colors.white)) : null,
-                        ),
-                        title: Text(name, style: const TextStyle(color: kTextPrimary)),
-                        subtitle: const Text('Wants to be your friend', style: TextStyle(color: kTextSecondary, fontSize: 12)),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.check_circle, color: Colors.green),
-                              onPressed: () => _accept(reqId, i),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.cancel, color: Colors.red),
-                              onPressed: () => _reject(reqId, i),
-                            ),
-                          ],
-                        ),
-                      );
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                const Text(
+                  'Notifications',
+                  style: TextStyle(color: kTextPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                if (_items.isNotEmpty)
+                  TextButton(
+                    onPressed: () async {
+                      await NotificationService.instance.markAllRead();
+                      widget.onDone();
                     },
+                    child: const Text('Mark all read', style: TextStyle(color: kPrimary, fontSize: 13)),
+                  ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: _items.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.notifications_none_rounded, size: 52, color: kTextMuted),
+                        const SizedBox(height: 12),
+                        const Text('No notifications', style: TextStyle(color: kTextSecondary, fontSize: 15)),
+                      ],
+                    ),
+                  )
+                : ListView.separated(
+                    controller: ctrl,
+                    itemCount: _items.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1, indent: 20, endIndent: 20),
+                    itemBuilder: (_, i) => _buildItem(_items[i]),
                   ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildItem(Map<String, dynamic> notif) {
+    final type = notif['type'] as String? ?? '';
+    final title = notif['title'] as String? ?? '';
+    final body = notif['body'] as String? ?? '';
+    final isRead = notif['is_read'] as bool? ?? true;
+    final createdAt = notif['created_at'] as String?;
+    final data = (notif['data'] as Map?)?.cast<String, dynamic>() ?? {};
+
+    IconData icon;
+    Color iconColor;
+    Color iconBg;
+    switch (type) {
+      case 'friend_request':
+        icon = Icons.person_add_rounded; iconColor = kPrimary; iconBg = kPrimaryLight;
+        break;
+      case 'friend_accepted':
+        icon = Icons.check_circle_rounded; iconColor = kSuccess; iconBg = kSuccess.withOpacity(0.1);
+        break;
+      case 'rating_received':
+        icon = Icons.star_rounded; iconColor = const Color(0xFFFFC933); iconBg = const Color(0xFFFFC933).withOpacity(0.12);
+        break;
+      case 'missed_call':
+        icon = Icons.phone_missed_rounded; iconColor = kDanger; iconBg = kDanger.withOpacity(0.1);
+        break;
+      default:
+        icon = Icons.notifications_rounded; iconColor = kTextSecondary; iconBg = kSurface;
+    }
+
+    return Container(
+      color: isRead ? Colors.transparent : kPrimary.withOpacity(0.03),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 42, height: 42,
+                decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
+                child: Icon(icon, color: iconColor, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              color: kTextPrimary,
+                              fontSize: 14,
+                              fontWeight: isRead ? FontWeight.w500 : FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (!isRead)
+                          Container(
+                            width: 8, height: 8,
+                            decoration: const BoxDecoration(color: kPrimary, shape: BoxShape.circle),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(body, style: const TextStyle(color: kTextSecondary, fontSize: 13)),
+                    const SizedBox(height: 3),
+                    Text(_timeAgo(createdAt), style: const TextStyle(color: kTextMuted, fontSize: 11)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (type == 'friend_request') ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const SizedBox(width: 54),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => _rejectFriend(notif),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: kBorder),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Decline', style: TextStyle(color: kTextSecondary, fontSize: 13)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _acceptFriend(notif),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kPrimary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      elevation: 0,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Accept', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (type == 'rating_received') ...[
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.only(left: 54),
+              child: Row(
+                children: List.generate(5, (i) => Icon(
+                  i < ((data['stars'] as num?)?.toInt() ?? 0)
+                      ? Icons.star_rounded
+                      : Icons.star_border_rounded,
+                  color: const Color(0xFFFFC933),
+                  size: 18,
+                )),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -957,8 +1134,15 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
 class _IncomingCallDialog extends StatefulWidget {
   final String callerName;
   final String? callerAvatar;
+  final String callerId;
+  final VoidCallback? onAutoDeclined;
 
-  const _IncomingCallDialog({required this.callerName, this.callerAvatar});
+  const _IncomingCallDialog({
+    required this.callerName,
+    this.callerAvatar,
+    required this.callerId,
+    this.onAutoDeclined,
+  });
 
   @override
   State<_IncomingCallDialog> createState() => _IncomingCallDialogState();
@@ -979,7 +1163,10 @@ class _IncomingCallDialogState extends State<_IncomingCallDialog>
       CurvedAnimation(parent: _ring, curve: Curves.easeInOut),
     );
     _autoDecline = Timer(const Duration(seconds: 30), () {
-      if (mounted) Navigator.of(context, rootNavigator: true).pop(false);
+      if (mounted) {
+        widget.onAutoDeclined?.call();
+        Navigator.of(context, rootNavigator: true).pop(false);
+      }
     });
   }
 

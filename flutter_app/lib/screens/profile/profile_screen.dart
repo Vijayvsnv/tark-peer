@@ -57,139 +57,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const SizedBox(height: 12),
-                  UserAvatar(
-                    name: _profile?.name ?? 'U',
-                    imageUrl: _profile?.avatarUrl,
-                    radius: 48,
+                  const SizedBox(height: 20),
+                  // Avatar with pencil badge
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      UserAvatar(
+                        name: _profile?.name ?? 'U',
+                        imageUrl: _profile?.avatarUrl,
+                        radius: 48,
+                      ),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: GestureDetector(
+                          onTap: () => context.push('/setup'),
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: kPrimary,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: const Icon(Icons.edit, color: Colors.white, size: 14),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
+                  // Name only
                   Text(
                     _profile?.name ?? 'User',
                     style: const TextStyle(
                       color: kTextPrimary, fontSize: 22, fontWeight: FontWeight.bold),
                   ),
-                  if ((_profile?.ratingCount ?? 0) > 0) ...[
-                    const SizedBox(height: 6),
-                    _RatingBadge(
-                      avg: _profile!.avgRating,
-                      count: _profile!.ratingCount,
-                    ),
-                  ],
-                  if (_profile?.bio != null && _profile!.bio!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      _profile!.bio!,
-                      style: const TextStyle(color: kTextSecondary, fontSize: 14),
-                    ),
-                  ],
-                  const SizedBox(height: 4),
-                  if (_profile?.age != null || _profile?.gender != null)
-                    Text(
-                      [
-                        if (_profile?.age != null) '${_profile!.age} yrs',
-                        if (_profile?.gender != null) _profile!.gender!,
-                      ].join(' • '),
-                      style: const TextStyle(color: kTextSecondary, fontSize: 13),
-                    ),
-                  if (_profile?.state != null || _profile?.country != null) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.location_on_outlined,
-                            color: kTextSecondary, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          [
-                            if (_profile?.state != null) _profile!.state!,
-                            if (_profile?.country != null) _profile!.country!,
-                          ].join(', '),
-                          style: const TextStyle(color: kTextSecondary, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ],
-                  if ((_profile?.occupation != null && _profile!.occupation!.trim().isNotEmpty)
-                      || _profile?.sector != null) ...[
-                    const SizedBox(height: 4),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Text(
-                        [
-                          if (_profile?.occupation != null && _profile!.occupation!.trim().isNotEmpty)
-                            _profile!.occupation!,
-                          if (_profile?.sector != null) _profile!.sector!,
-                        ].join(' · '),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: kTextSecondary, fontSize: 13),
-                      ),
-                    ),
-                  ],
-                  if (_profile?.motherTongue != null) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.translate_outlined,
-                            color: kTextSecondary, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          _profile!.motherTongue!,
-                          style: const TextStyle(color: kTextSecondary, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: () => context.push('/setup'),
-                    icon: const Icon(Icons.edit, size: 16, color: kPrimary),
-                    label: const Text('Edit Profile', style: TextStyle(color: kPrimary, fontWeight: FontWeight.w600)),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: kPrimary, width: 1.5),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                    ),
+                  const SizedBox(height: 28),
+                  // Friends / Calls / Rooms — vertical list
+                  _navCard(
+                    context,
+                    icon: Icons.people_alt_outlined,
+                    label: 'Friends',
+                    onTap: () => context.push('/friends'),
                   ),
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      Expanded(child: _navCard(
-                        context,
-                        icon: Icons.people_alt_outlined,
-                        label: 'Friends',
-                        onTap: () => context.push('/friends'),
-                      )),
-                      const SizedBox(width: 12),
-                      Expanded(child: _navCard(
-                        context,
-                        icon: Icons.call_outlined,
-                        label: 'Calls',
-                        onTap: () => context.push('/calls'),
-                      )),
-                      const SizedBox(width: 12),
-                      Expanded(child: _navCard(
-                        context,
-                        icon: Icons.meeting_room_outlined,
-                        label: 'Rooms',
-                        onTap: () => context.push('/rooms'),
-                      )),
-                    ],
+                  const SizedBox(height: 10),
+                  _navCard(
+                    context,
+                    icon: Icons.call_outlined,
+                    label: 'Calls',
+                    onTap: () => context.push('/calls'),
                   ),
-                  const SizedBox(height: 32),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _confirmLogout,
-                      icon: const Icon(Icons.logout, color: kDanger),
-                      label: const Text('Logout', style: TextStyle(color: kDanger, fontWeight: FontWeight.w600)),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: kDanger, width: 1.5),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
+                  const SizedBox(height: 10),
+                  _navCard(
+                    context,
+                    icon: Icons.meeting_room_outlined,
+                    label: 'Rooms',
+                    onTap: () => context.push('/rooms'),
+                  ),
+                  const SizedBox(height: 28),
+                  _navCard(
+                    context,
+                    icon: Icons.logout,
+                    label: 'Logout',
+                    onTap: _confirmLogout,
                   ),
                   const SizedBox(height: 20),
                 ],
@@ -244,29 +175,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: kBorder),
-          boxShadow: [
-            BoxShadow(
-              color: kPrimaryDeep.withOpacity(0.04),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: kPrimary, width: 1.5),
         ),
-        child: Column(
+        child: Row(
           children: [
             Container(
-              width: 44,
-              height: 44,
+              width: 38,
+              height: 38,
               decoration: const BoxDecoration(color: kPrimary, shape: BoxShape.circle),
-              child: Icon(icon, color: Colors.white, size: 22),
+              child: Icon(icon, color: Colors.white, size: 20),
             ),
-            const SizedBox(height: 10),
-            Text(label, style: const TextStyle(color: kTextPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(color: kTextPrimary, fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: kPrimary, size: 22),
           ],
         ),
       ),
@@ -274,40 +205,3 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-class _RatingBadge extends StatelessWidget {
-  final double avg;
-  final int count;
-
-  const _RatingBadge({required this.avg, required this.count});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFC933).withOpacity(0.14),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.star_rounded, color: Color(0xFFEAB308), size: 16),
-          const SizedBox(width: 4),
-          Text(
-            avg.toStringAsFixed(1),
-            style: const TextStyle(
-              color: Color(0xFF8B6D0B),
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            '($count)',
-            style: const TextStyle(color: kTextSecondary, fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-}

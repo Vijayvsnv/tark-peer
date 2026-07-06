@@ -5,7 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 class UpdateService {
   static const _apiUrl =
-      'https://api.github.com/repos/Vijayvsnv/tark-peer/releases/latest';
+      'https://api.github.com/repos/Vijayvsnv/vijayai/releases/latest';
 
   Future<Map<String, String>?> checkForUpdate() async {
     try {

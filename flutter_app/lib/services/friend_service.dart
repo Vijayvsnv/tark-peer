@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/constants.dart';
+import 'auth_service.dart';
 
 class FriendService {
   final _client = Supabase.instance.client;
@@ -27,13 +31,47 @@ class FriendService {
       'receiver_id': receiverId,
       'status': 'pending',
     });
+
+    // Push notification to receiver (fire-and-forget)
+    _notifyFriendRequest(receiverId);
+  }
+
+  void _notifyFriendRequest(String receiverId) {
+    final token = AuthService().accessToken;
+    if (token == null) return;
+    http.post(
+      Uri.parse('$kBackendUrl/notify/friend-request'),
+      headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      body: jsonEncode({'receiver_id': receiverId}),
+    ).catchError((_) {});
   }
 
   Future<void> acceptRequest(String friendshipId) async {
+    // Fetch requester before accepting so we can notify them
+    final row = await _client
+        .from('friendships')
+        .select('requester_id')
+        .eq('id', friendshipId)
+        .maybeSingle();
+
     await _client
         .from('friendships')
         .update({'status': 'accepted', 'updated_at': DateTime.now().toIso8601String()})
         .eq('id', friendshipId);
+
+    if (row != null) {
+      _notifyFriendAccepted(row['requester_id'] as String);
+    }
+  }
+
+  void _notifyFriendAccepted(String requesterId) {
+    final token = AuthService().accessToken;
+    if (token == null) return;
+    http.post(
+      Uri.parse('$kBackendUrl/notify/friend-accepted'),
+      headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      body: jsonEncode({'requester_id': requesterId}),
+    ).catchError((_) {});
   }
 
   Future<void> rejectRequest(String friendshipId) async {

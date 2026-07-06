@@ -15,7 +15,7 @@ from fastapi import APIRouter, Header, HTTPException
 
 from core.config import settings
 from models.schemas import CallEndEvent, CallRateEvent, DirectCallBody
-from services import redis_client
+from services import notification_service, redis_client
 from services.agora_service import generate_token
 from services.supabase_client import supabase_admin
 from services.supabase_realtime import broadcast
@@ -169,6 +169,16 @@ async def direct_call(body: DirectCallBody, authorization: str = Header(...)):
             "partner_id": caller_id,
             "partner": profile,
         },
+    )
+
+    # FCM push — wakes receiver even when app is in background/killed
+    caller_name = profile.get("name", "Someone")
+    asyncio.create_task(
+        notification_service.send_to_user(
+            body.receiver_id,
+            title=f"📞 Incoming call from {caller_name}",
+            data={"type": "incoming_call", "caller_id": caller_id},
+        )
     )
 
     return {

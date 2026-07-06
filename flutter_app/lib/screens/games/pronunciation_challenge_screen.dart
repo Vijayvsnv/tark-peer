@@ -314,11 +314,31 @@ class _PronunciationChallengeScreenState
         const SizedBox(height: 32),
 
         if (!_answered) ...[
-          if (!_sttAvailable)
+          if (!_sttAvailable) ...[
             const Text('Speech recognition not available on this device',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: kTextSecondary, fontSize: 13))
-          else
+                style: TextStyle(color: kTextSecondary, fontSize: 13)),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: _next,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: const BorderSide(color: kBorder),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    foregroundColor: kTextSecondary,
+                  ),
+                  child: Text(
+                    _index + 1 >= _total ? 'See Results' : 'Skip →',
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ),
+          ] else
             AnimatedBuilder(
               animation: _pulse,
               builder: (_, child) => Transform.scale(

@@ -77,31 +77,9 @@ class _SetupScreenState extends State<SetupScreen> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_gender == null) {
-      _showError('Please select your gender');
-      return;
-    }
-    if (_country == null) {
-      _showError('Please select your country');
-      return;
-    }
 
-    final states = kCountryStates[_country] ?? const [];
-    String? finalState;
-    if (states.isEmpty) {
-      final txt = _stateFreeCtrl.text.trim();
-      if (txt.isEmpty) {
-        _showError('Please enter your state/region');
-        return;
-      }
-      finalState = txt;
-    } else {
-      if (_state == null) {
-        _showError('Please select your state');
-        return;
-      }
-      finalState = _state;
-    }
+    final states = kCountryStates[_country!] ?? const [];
+    final finalState = states.isEmpty ? _stateFreeCtrl.text.trim() : _state!;
 
     setState(() => _loading = true);
     try {
@@ -121,16 +99,15 @@ class _SetupScreenState extends State<SetupScreen> {
       context.go('/home');
     } catch (e) {
       if (!mounted) return;
-      _showError(e.toString());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red),
-    );
   }
 
   @override
@@ -201,6 +178,7 @@ class _SetupScreenState extends State<SetupScreen> {
                   DropdownMenuItem(value: 'female', child: Text('Female')),
                   DropdownMenuItem(value: 'other', child: Text('Other')),
                 ],
+                validator: (v) => v == null ? 'Please select your gender' : null,
                 onChanged: (v) => setState(() => _gender = v),
               ),
               const SizedBox(height: 24),
@@ -221,6 +199,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 items: kCountryStates.keys
                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                     .toList(),
+                validator: (v) => v == null ? 'Please select your country' : null,
                 onChanged: (v) => setState(() {
                   _country = v;
                   _state = null;
@@ -243,12 +222,14 @@ class _SetupScreenState extends State<SetupScreen> {
                   items: states
                       .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                       .toList(),
+                  validator: (v) => v == null ? 'Please select your state' : null,
                   onChanged: (v) => setState(() => _state = v),
                 )
               else
                 TextFormField(
                   controller: _stateFreeCtrl,
                   style: const TextStyle(color: kTextPrimary),
+                  validator: (v) => v!.trim().isEmpty ? 'Please enter your state / region' : null,
                   decoration: const InputDecoration(
                     labelText: 'State / Region',
                     prefixIcon: Icon(Icons.location_on_outlined, color: kTextSecondary),

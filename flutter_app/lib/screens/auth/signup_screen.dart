@@ -1,4 +1,3 @@
-import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
@@ -24,19 +23,16 @@ class _SignupScreenState extends State<SignupScreen> {
 
   Future<void> _signup() async {
     if (!_formKey.currentState!.validate()) return;
-    developer.log('signup attempt: email=${_emailCtrl.text.trim()}', name: 'auth');
     setState(() => _loading = true);
     try {
-      final resp = await _auth.signUp(
+      await _auth.signUp(
         email: _emailCtrl.text.trim(),
         password: _passCtrl.text,
         name: _nameCtrl.text.trim(),
       );
-      developer.log('signup success: user=${resp.user?.id} session=${resp.session != null}', name: 'auth');
       if (!mounted) return;
       context.go('/setup');
-    } catch (e, st) {
-      developer.log('signup FAILED', name: 'auth', error: e, stackTrace: st);
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),

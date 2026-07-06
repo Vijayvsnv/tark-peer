@@ -154,7 +154,7 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen>
         .subscribe();
 
     _roomChannel = supabase
-        .channel('lobby_room_${widget.room.roomId}')
+        .channel('room:${widget.room.roomId}')
         .onBroadcast(event: 'room_ended', callback: (_) => _onRoomEnded())
         .onBroadcast(event: 'member_left', callback: (_) => _fetchMembers())
         .subscribe();
@@ -373,7 +373,7 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen>
                         icon: _speakerEnabled ? Icons.volume_up_rounded : Icons.hearing_rounded,
                         label: _speakerEnabled ? 'Speaker' : 'Earpiece',
                         active: _speakerEnabled,
-                        activeColor: kCyan,
+                        activeColor: kPrimary,
                         onTap: () {
                           _callService.setSpeakerphone(!_speakerEnabled);
                           setState(() => _speakerEnabled = !_speakerEnabled);
@@ -449,16 +449,16 @@ class _MemberBox extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       decoration: BoxDecoration(
-        color: const Color(0xFF1C2B3A),
+        color: const Color(0xFF162040),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isSpeaking
-              ? kCyan.withOpacity(0.3 + glowValue * 0.7)
+              ? kAccent.withOpacity(0.3 + glowValue * 0.7)
               : Colors.white.withOpacity(0.07),
           width: isSpeaking ? 2 : 1,
         ),
         boxShadow: isSpeaking
-            ? [BoxShadow(color: kCyan.withOpacity(0.25 * glowValue), blurRadius: 16, spreadRadius: 2)]
+            ? [BoxShadow(color: kAccent.withOpacity(0.25 * glowValue), blurRadius: 16, spreadRadius: 2)]
             : null,
       ),
       child: Column(
@@ -474,7 +474,7 @@ class _MemberBox extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: isSpeaking
-                      ? Border.all(color: kCyan.withOpacity(0.6 + glowValue * 0.4), width: 2)
+                      ? Border.all(color: kAccent.withOpacity(0.6 + glowValue * 0.4), width: 2)
                       : null,
                 ),
                 child: UserAvatar(
@@ -541,7 +541,7 @@ class _Dot extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 2),
       width: 5,
       height: 5 + (index == 1 ? glowValue * 4 : (1 - glowValue) * 3),
-      decoration: BoxDecoration(color: kCyan.withOpacity(0.7), borderRadius: BorderRadius.circular(3)),
+      decoration: BoxDecoration(color: kAccent.withOpacity(0.7), borderRadius: BorderRadius.circular(3)),
     );
   }
 }
@@ -553,7 +553,7 @@ class _EmptySlot extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF152030),
+        color: const Color(0xFF0F1A35),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: Colors.white.withOpacity(0.06)),
       ),

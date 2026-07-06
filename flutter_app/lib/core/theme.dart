@@ -27,8 +27,8 @@ const Color kTextSecondary = Color(0xFF6B7280); // slate gray for body
 const Color kTextMuted     = Color(0xFF9CA3AF); // hints, timestamps
 
 // Immersive dark surfaces — used ONLY in call screen for focus
-const Color kCallBgTop     = Color(0xFF0B1422);
-const Color kCallBgBottom  = Color(0xFF15243B);
+const Color kCallBgTop     = Color(0xFF0D1935);
+const Color kCallBgBottom  = Color(0xFF1B3268);
 
 ThemeData appTheme = ThemeData(
   brightness: Brightness.light,
@@ -39,10 +39,8 @@ ThemeData appTheme = ThemeData(
     brightness: Brightness.light,
     primary: kPrimary,
     secondary: kAccent,
-    background: kBackground,
     surface: kSurface,
     error: kDanger,
-    onBackground: kTextPrimary,
     onSurface: kTextPrimary,
   ),
   fontFamily: 'Inter',

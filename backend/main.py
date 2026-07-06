@@ -12,12 +12,12 @@ import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import auth, call, match, profile, room
+from routers import auth, call, match, notify, profile, room
 from services import redis_client
 from services.supabase_client import supabase_admin
 from services.supabase_realtime import broadcast
@@ -67,6 +67,52 @@ async def _expire_one_room(channel_name: str):
         await redis_client.delete_user_room(user_b)
     await redis_client.delete_room_partners(channel_name, user_a, user_b)
     await redis_client.deregister_active_room(channel_name)
+
+
+_IST = timezone(timedelta(hours=5, minutes=30))
+
+
+async def peak_hour_notifier():
+    """Every day at 7:30 PM and 8:00 PM IST, blast a reminder to all users."""
+    from services import notification_service
+
+    # (hour, minute, title)
+    _SLOTS = [
+        (19, 30, "⏰ Peak hours start in 30 mins! Get ready to practice"),
+        (20,  0, "🌟 Peak hours are live! Find a partner now"),
+    ]
+
+    while True:
+        now_ist = datetime.now(_IST)
+        # Find the next upcoming slot
+        next_target = None
+        next_title = None
+        for hour, minute, title in _SLOTS:
+            candidate = now_ist.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if now_ist >= candidate:
+                candidate += timedelta(days=1)
+            if next_target is None or candidate < next_target:
+                next_target = candidate
+                next_title = title
+
+        wait = (next_target - now_ist).total_seconds()
+        logger.info("Peak hour notifier: next blast '%s' in %.0f s", next_title, wait)
+        await asyncio.sleep(wait)
+        await notification_service.send_peak_hour_blast(next_title)
+
+
+async def streak_warning_notifier():
+    """Every day at 6:00 PM IST, warn users whose streak is about to break."""
+    from services import notification_service
+    while True:
+        now_ist = datetime.now(_IST)
+        target = now_ist.replace(hour=18, minute=0, second=0, microsecond=0)
+        if now_ist >= target:
+            target += timedelta(days=1)
+        wait = (target - now_ist).total_seconds()
+        logger.info("Streak warning notifier: next run in %.0f s", wait)
+        await asyncio.sleep(wait)
+        await notification_service.send_streak_warning_blast()
 
 
 async def message_cleanup():
@@ -124,14 +170,18 @@ async def lifespan(app: FastAPI):
     scanner = asyncio.create_task(call_expiry_scanner())
     msg_cleaner = asyncio.create_task(message_cleanup())
     room_expiry = asyncio.create_task(room_expiry_scanner())
+    peak_notifier = asyncio.create_task(peak_hour_notifier())
+    streak_notifier = asyncio.create_task(streak_warning_notifier())
     try:
         yield
     finally:
         scanner.cancel()
         msg_cleaner.cancel()
         room_expiry.cancel()
+        peak_notifier.cancel()
+        streak_notifier.cancel()
         try:
-            await asyncio.gather(scanner, msg_cleaner, room_expiry, return_exceptions=True)
+            await asyncio.gather(scanner, msg_cleaner, room_expiry, peak_notifier, streak_notifier, return_exceptions=True)
         except (asyncio.CancelledError, Exception):
             pass
         await redis_client.close_redis()
@@ -152,6 +202,7 @@ app.include_router(profile.router)
 app.include_router(call.router)
 app.include_router(match.router)
 app.include_router(room.router)
+app.include_router(notify.router)
 
 
 @app.get("/health")

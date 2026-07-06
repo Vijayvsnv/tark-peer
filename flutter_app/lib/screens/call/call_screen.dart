@@ -294,76 +294,140 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       barrierDismissible: false,
       barrierColor: Colors.black87,
       builder: (dialogCtx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: kCallBgBottom,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Rate your call with',
-                style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 14),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                widget.event.partner.name,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+        builder: (ctx, setDialogState) => Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: kPrimary, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: kPrimary.withOpacity(0.18),
+                  blurRadius: 28,
+                  offset: const Offset(0, 8),
                 ),
-              ),
-              const SizedBox(height: 18),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(5, (i) {
-                  final idx = i + 1;
-                  final filled = idx <= selected;
-                  return IconButton(
-                    onPressed: () => setDialogState(() => selected = idx),
-                    icon: Icon(
-                      filled ? Icons.star_rounded : Icons.star_border_rounded,
-                      color: filled ? const Color(0xFFFFC933) : Colors.white70,
-                      size: 38,
-                    ),
-                  );
-                }),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(dialogCtx),
-                    child: const Text(
-                      'Skip',
-                      style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w600),
-                    ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: kPrimaryLight,
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                  ElevatedButton(
-                    onPressed: selected == 0
-                        ? null
-                        : () async {
-                            Navigator.pop(dialogCtx);
-                            await _ratingService.rate(
-                              channelName: widget.event.channelName,
-                              ratedUserId: widget.event.partnerId,
-                              stars: selected,
-                            );
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: kCyan,
-                      disabledBackgroundColor: kCyan.withOpacity(0.35),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    ),
-                    child: const Text('Submit', style: TextStyle(fontWeight: FontWeight.w700)),
+                  child: const Text(
+                    'Rate your call',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: kPrimary, fontSize: 12, fontWeight: FontWeight.w600),
                   ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  widget.event.partner.name,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: kTextPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'How was the conversation?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: kTextSecondary, fontSize: 13),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (i) {
+                    final idx = i + 1;
+                    final filled = idx <= selected;
+                    return GestureDetector(
+                      onTap: () => setDialogState(() => selected = idx),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Icon(
+                          filled ? Icons.star_rounded : Icons.star_border_rounded,
+                          color: filled ? const Color(0xFFFFC933) : kTextMuted,
+                          size: 38,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  selected == 0
+                      ? 'Tap a star'
+                      : selected == 1
+                          ? 'Poor'
+                          : selected == 2
+                              ? 'Fair'
+                              : selected == 3
+                                  ? 'Good'
+                                  : selected == 4
+                                      ? 'Great'
+                                      : 'Excellent!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: selected == 0 ? kTextMuted : kPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(dialogCtx),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: kBorder, width: 1.5),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                        ),
+                        child: const Text(
+                          'Skip',
+                          style: TextStyle(color: kTextSecondary, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: selected == 0
+                            ? null
+                            : () async {
+                                Navigator.pop(dialogCtx);
+                                await _ratingService.rate(
+                                  channelName: widget.event.channelName,
+                                  ratedUserId: widget.event.partnerId,
+                                  stars: selected,
+                                );
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kPrimary,
+                          disabledBackgroundColor: kPrimary.withOpacity(0.3),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                        ),
+                        child: const Text(
+                          'Submit',
+                          style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -480,8 +544,8 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
               height: 92,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: kCyan.withOpacity(0.18),
-                border: Border.all(color: kCyan.withOpacity(0.6), width: 2),
+                color: kAccent.withOpacity(0.18),
+                border: Border.all(color: kAccent.withOpacity(0.7), width: 2),
               ),
               child: const Icon(Icons.phone, color: Colors.white, size: 40),
             ),
@@ -541,7 +605,9 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: kCyan.withOpacity(_partnerSpeaking ? 0.6 : 0.18),
+                      color: _partnerSpeaking
+                          ? kAccent.withOpacity(0.6)
+                          : kPrimary.withOpacity(0.25),
                       blurRadius: _partnerSpeaking ? 32 : 14,
                       spreadRadius: _partnerSpeaking ? 6 : 2,
                     ),
@@ -551,7 +617,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
               Container(
                 width: 120,
                 height: 120,
-                decoration: const BoxDecoration(shape: BoxShape.circle, color: kCyan),
+                decoration: const BoxDecoration(shape: BoxShape.circle, color: kPrimary),
               ),
               Container(
                 width: 112,
@@ -592,7 +658,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
               if (partner.age != null) '${partner.age}',
               if (partner.gender != null) partner.gender!,
             ].join(' · '),
-            style: const TextStyle(color: Color(0xFFB8B0CC), fontSize: 13),
+            style: const TextStyle(color: Colors.white60, fontSize: 13),
           ),
         ],
 
@@ -603,14 +669,14 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(Icons.location_on_outlined,
-                  color: Color(0xFFB8B0CC), size: 13),
+                  color: Colors.white60, size: 13),
               const SizedBox(width: 4),
               Text(
                 [
                   if (partner.state != null) partner.state!,
                   if (partner.country != null) partner.country!,
                 ].join(', '),
-                style: const TextStyle(color: Color(0xFFB8B0CC), fontSize: 13),
+                style: const TextStyle(color: Colors.white60, fontSize: 13),
               ),
             ],
           ),
@@ -630,7 +696,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Color(0xFFB8B0CC), fontSize: 13),
+              style: const TextStyle(color: Colors.white60, fontSize: 13),
             ),
           ),
         ],
@@ -646,7 +712,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: Color(0xFFB8B0CC),
+                color: Colors.white60,
                 fontSize: 13,
                 fontStyle: FontStyle.italic,
               ),
@@ -678,7 +744,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                 icon: _speakerEnabled ? Icons.volume_up_rounded : Icons.volume_down_rounded,
                 label: 'Speaker',
                 active: _speakerEnabled,
-                activeColor: kCyan,
+                activeColor: kPrimary,
                 onTap: _toggleSpeaker,
               ),
               // Earbuds — auto-detected, no manual tap
@@ -686,7 +752,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                 icon: _headphonesConnected ? Icons.headphones : Icons.headset_off,
                 label: _earbdsLabel,
                 active: _headphonesConnected,
-                activeColor: kCyan,
+                activeColor: kPrimary,
                 onTap: null,
               ),
             ],
@@ -711,8 +777,8 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
               _EndActionBtn(
                 icon: Icons.skip_next_rounded,
                 label: 'Next',
-                bgColor: kCyan,
-                glowColor: kCyan.withOpacity(0.45),
+                bgColor: kPrimary,
+                glowColor: kPrimary.withOpacity(0.45),
                 onTap: _skipCall,
               ),
             ],

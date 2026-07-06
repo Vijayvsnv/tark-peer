@@ -20,7 +20,7 @@ class MatchingScreen extends StatefulWidget {
 }
 
 class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStateMixin {
-  final _matchService = MatchService();
+  late MatchService _matchService;
   final _auth = AuthService();
   late AnimationController _pulseCtrl;
   late Animation<double> _pulse;
@@ -29,6 +29,8 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
   final _confettiCtrl = ConfettiController(duration: const Duration(milliseconds: 1200));
   StreamSubscription? _sub;
   bool _cancelling = false;
+  bool _timedOut = false;
+  bool _retrying = false;
   int _remaining = 90;
   Timer? _timer;
   bool _matched = false;
@@ -37,6 +39,7 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
   @override
   void initState() {
     super.initState();
+    _matchService = MatchService();
     _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))
       ..repeat(reverse: true);
     _pulse = Tween<double>(begin: 0.95, end: 1.05).animate(
@@ -50,6 +53,12 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
       parent: _celebrateCtrl,
       curve: Curves.elasticOut,
     );
+    _startTimer();
+    _connect();
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() {
@@ -60,7 +69,6 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
         }
       });
     });
-    _connect();
   }
 
   Future<void> _connect() async {
@@ -121,20 +129,30 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
   }
 
   Future<void> _timeoutCancel() async {
-    if (_cancelling) return;
+    if (_cancelling || _matched) return;
     setState(() => _cancelling = true);
     _matchService.sendCancel();
-    await Future.delayed(const Duration(milliseconds: 300));
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No partner found. Try again!'),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 3),
-        ),
-      );
-      context.go('/home');
-    }
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (mounted) setState(() { _timedOut = true; _cancelling = false; });
+  }
+
+  Future<void> _retry() async {
+    if (_retrying) return;
+    setState(() => _retrying = true);
+    _sub?.cancel();
+    _timer?.cancel();
+    _matchService.dispose();
+    _matchService = MatchService();
+    setState(() {
+      _timedOut = false;
+      _remaining = 90;
+      _cancelling = false;
+      _matched = false;
+      _matchedEvent = null;
+      _retrying = false;
+    });
+    _startTimer();
+    await _connect();
   }
 
   Color get _timerColor {
@@ -278,6 +296,11 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
               scale: _celebrateScale,
               confetti: _confettiCtrl,
             ),
+            if (_timedOut) _TimeoutCard(
+              retrying: _retrying,
+              onRetry: _retry,
+              onCancel: () => context.go('/home'),
+            ),
         ],
       ),
     );
@@ -397,74 +420,159 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
+class _TimeoutCard extends StatelessWidget {
+  final bool retrying;
+  final VoidCallback onRetry;
+  final VoidCallback onCancel;
+
+  const _TimeoutCard({required this.retrying, required this.onRetry, required this.onCancel});
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withOpacity(0.5),
+        child: Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 32),
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.14),
+                  blurRadius: 32,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: const BoxDecoration(color: kSurface, shape: BoxShape.circle),
+                  child: const Icon(Icons.search_off_rounded, size: 38, color: kTextMuted),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'No match found',
+                  style: TextStyle(color: kTextPrimary, fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'No one was available right now.\nTry again or come back later.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: kTextSecondary, fontSize: 14, height: 1.5),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '⏰  Peak hours: Evening 8–9 PM',
+                  style: TextStyle(color: kTextMuted, fontSize: 12),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: retrying ? null : onCancel,
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: kBorder, width: 1.5),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(color: kTextSecondary, fontWeight: FontWeight.w600, fontSize: 15),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: retrying ? null : onRetry,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kPrimary,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          elevation: 0,
+                        ),
+                        child: retrying
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Text(
+                                'Retry',
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RingPainter extends CustomPainter {
   final int remaining;
-
   const _RingPainter({required this.remaining});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - 14;
-    const strokeWidth = 13.0;
-    const gapAngle = 0.09;
-    final segmentSweep = (2 * pi / 3) - gapAngle;
+    const sw = 13.0;
+    const startAngle = -pi / 2; // 12 o'clock
 
-    // Background arcs (grey)
-    final bgPaint = Paint()
+    // Full grey background ring
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      startAngle, 2 * pi, false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = sw
+        ..color = Colors.grey.withOpacity(0.15),
+    );
+
+    if (remaining <= 0) return;
+
+    // How much of the ring has been "consumed" clockwise from 12 o'clock
+    final elapsed = 90 - remaining;
+    final consumed = (elapsed / 90.0) * 2 * pi;
+    const z = 2 * pi / 3; // 120° per zone
+    final rect = Rect.fromCircle(center: center, radius: radius);
+
+    Paint arc(Color c) => Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
+      ..strokeWidth = sw
       ..strokeCap = StrokeCap.round
-      ..color = Colors.grey.withOpacity(0.15);
+      ..color = c;
 
-    for (int i = 0; i < 3; i++) {
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        -pi / 2 + i * (2 * pi / 3) + gapAngle / 2,
-        segmentSweep,
-        false,
-        bgPaint,
-      );
+    // Zones (fixed positions on ring):
+    //   Green  → 12 to 4 o'clock  [0,   z)   — erased first (90→61s)
+    //   Yellow → 4  to 8 o'clock  [z,  2z)   — erased second (60→31s)
+    //   Red    → 8  to 12 o'clock [2z, 3z)   — erased last   (30→0s)
+    //
+    // Draw only the portion of each zone that hasn't been consumed yet.
+    void drawZone(double zStart, double zEnd, Color color) {
+      final visStart = max(consumed, zStart);
+      final sweep = zEnd - visStart;
+      if (sweep <= 0) return;
+      canvas.drawArc(rect, startAngle + visStart, sweep, false, arc(color));
     }
 
-    final fgPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-
-    // Only the active segment is colored — others stay grey.
-    // Green (90→60s) → Yellow (60→30s) → Red (30→0s)
-    if (remaining > 60) {
-      fgPaint.color = Colors.green;
-      final progress = (remaining - 60) / 30.0;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        -pi / 2 + gapAngle / 2,
-        segmentSweep * progress,
-        false,
-        fgPaint,
-      );
-    } else if (remaining > 30) {
-      fgPaint.color = Colors.amber;
-      final progress = (remaining - 30) / 30.0;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        -pi / 2 + (2 * pi / 3) + gapAngle / 2,
-        segmentSweep * progress,
-        false,
-        fgPaint,
-      );
-    } else if (remaining > 0) {
-      fgPaint.color = Colors.red;
-      final progress = remaining / 30.0;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        -pi / 2 + 2 * (2 * pi / 3) + gapAngle / 2,
-        segmentSweep * progress,
-        false,
-        fgPaint,
-      );
-    }
+    drawZone(0,   z,   Colors.green);
+    drawZone(z,  2*z,  Colors.amber);
+    drawZone(2*z, 3*z, Colors.red);
   }
 
   @override
