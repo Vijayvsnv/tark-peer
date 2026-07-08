@@ -102,6 +102,38 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
       debugPrint('[MatchingScreen] Match found! Celebrating...');
       final event = MatchEvent.fromJson(msg);
       _celebrateAndNavigate(event);
+    } else if (type == 'restricted') {
+      _timer?.cancel();
+      _matchService.disconnect();
+      final message = (msg['message'] as String?) ??
+          'Your account is temporarily restricted due to reports.';
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Account Restricted',
+            style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold),
+          ),
+          content: Text(message, style: const TextStyle(color: kTextSecondary)),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                if (mounted) context.go('/home');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kPrimary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
     } else if (type == 'call_ended' || type == 'error') {
       debugPrint('[MatchingScreen] call_ended/error — going home. msg=$msg');
       context.go('/home');

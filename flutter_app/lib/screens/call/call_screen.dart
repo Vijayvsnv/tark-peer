@@ -11,10 +11,12 @@ import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../models/match_event.dart';
 import '../../services/auth_service.dart';
+import '../../services/block_service.dart';
 import '../../services/call_audio_manager.dart';
 import '../../services/call_service.dart';
 import '../../services/friend_service.dart';
 import '../../services/rating_service.dart';
+import '../../widgets/report_sheet.dart';
 import '../../widgets/user_avatar.dart';
 
 // Agora AudioRoute int constants
@@ -36,6 +38,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   final _audioManager = CallAudioManager();
   final _friendService = FriendService();
   final _ratingService = RatingService();
+  final _blockService = BlockService();
   final _auth = AuthService();
 
   int _elapsed = 0;
@@ -287,6 +290,83 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     _endCall(reason: 'skip', navigateTo: '/matching', askRating: false);
   }
 
+  Future<void> _openReportSheet() async {
+    if (widget.event.partnerId.isEmpty) return;
+    final success = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => ReportSheet(
+        reportedId: widget.event.partnerId,
+        reportedName: widget.event.partner.name,
+        roomId: widget.event.channelName,
+      ),
+    );
+    if (success == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Report submitted. Thank you for keeping Tark Peer safe.'),
+          backgroundColor: kSuccess,
+        ),
+      );
+      await _showPostReportDialog();
+    }
+  }
+
+  Future<void> _showPostReportDialog() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text(
+          'What would you like to do?',
+          style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold, fontSize: 17),
+        ),
+        content: const Text(
+          'You can end this call, block this user, or stay on the call.',
+          style: TextStyle(color: kTextSecondary, fontSize: 13),
+        ),
+        actionsAlignment: MainAxisAlignment.spaceEvenly,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Stay', style: TextStyle(color: kTextSecondary, fontWeight: FontWeight.w600)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _blockService.blockUser(widget.event.partnerId).catchError((_) {});
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${widget.event.partner.name} blocked.'),
+                  backgroundColor: kDanger,
+                ),
+              );
+            },
+            child: const Text('Block', style: TextStyle(color: kDanger, fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _endCall(reason: 'manual', askRating: false);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kDanger,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            child: const Text('End Call'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showRatingDialog() async {
     int selected = 0;
     await showDialog<void>(
@@ -381,7 +461,22 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 22),
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pop(dialogCtx);
+                    _openReportSheet();
+                  },
+                  child: const Text(
+                    'Report this user',
+                    style: TextStyle(
+                      color: kDanger,
+                      fontSize: 12,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
@@ -572,20 +667,36 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
 
     return Column(
       children: [
-        // ── Elapsed time — subtle, top center ────────────────────────────────
-        const SizedBox(height: 16),
-        Text(
-          _formatElapsed(_elapsed),
-          style: const TextStyle(
-            color: Colors.white54,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            fontFamily: 'monospace',
-            letterSpacing: 2,
+        // ── Top bar: elapsed time + report button ─────────────────────────────
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              const SizedBox(width: 40), // balance for report icon
+              Expanded(
+                child: Text(
+                  _formatElapsed(_elapsed),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'monospace',
+                    letterSpacing: 2,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: _openReportSheet,
+                icon: const Icon(Icons.flag_outlined, color: Colors.white38, size: 22),
+                tooltip: 'Report',
+              ),
+            ],
           ),
         ),
 
-        const SizedBox(height: 28),
+        const SizedBox(height: 20),
 
         // ── Partner avatar ────────────────────────────────────────────────────
         AnimatedBuilder(
