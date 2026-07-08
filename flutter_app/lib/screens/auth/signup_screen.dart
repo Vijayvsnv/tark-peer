@@ -1,6 +1,9 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/custom_button.dart';
@@ -20,9 +23,19 @@ class _SignupScreenState extends State<SignupScreen> {
   final _auth = AuthService();
   bool _loading = false;
   bool _obscure = true;
+  bool _ageConfirmed = false;
 
   Future<void> _signup() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!_ageConfirmed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You must confirm you are 18 or older to continue.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     setState(() => _loading = true);
     try {
       await _auth.signUp(
@@ -105,8 +118,63 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                   validator: (v) => v!.length >= 6 ? null : 'Min 6 characters',
                 ),
-                const SizedBox(height: 32),
-                CustomButton(label: 'Create Account', onPressed: _signup, isLoading: _loading),
+                const SizedBox(height: 20),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Checkbox(
+                      value: _ageConfirmed,
+                      activeColor: kPrimary,
+                      onChanged: (v) => setState(() => _ageConfirmed = v ?? false),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: RichText(
+                          text: TextSpan(
+                            style: const TextStyle(color: kTextSecondary, fontSize: 13),
+                            children: [
+                              const TextSpan(text: 'I confirm I am 18 years or older and agree to the '),
+                              TextSpan(
+                                text: 'Terms of Service',
+                                style: const TextStyle(
+                                  color: kPrimary,
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.underline,
+                                ),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () => launchUrl(
+                                        Uri.parse(kTermsUrl),
+                                        mode: LaunchMode.externalApplication,
+                                      ),
+                              ),
+                              const TextSpan(text: ' & '),
+                              TextSpan(
+                                text: 'Privacy Policy',
+                                style: const TextStyle(
+                                  color: kPrimary,
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.underline,
+                                ),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () => launchUrl(
+                                        Uri.parse(kPrivacyPolicyUrl),
+                                        mode: LaunchMode.externalApplication,
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                CustomButton(
+                  label: 'Create Account',
+                  onPressed: _ageConfirmed ? _signup : null,
+                  isLoading: _loading,
+                ),
                 const SizedBox(height: 16),
                 Center(
                   child: GestureDetector(

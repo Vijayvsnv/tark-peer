@@ -160,7 +160,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 ),
                 validator: (v) {
                   final age = int.tryParse(v ?? '');
-                  if (age == null || age < 13 || age > 100) return 'Enter valid age (13-100)';
+                  if (age == null || age < 18 || age > 100) return 'You must be 18 or older to use Tark Peer';
                   return null;
                 },
               ),

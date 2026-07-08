@@ -37,6 +37,9 @@ class _SplashScreenState extends State<SplashScreen> {
       if (!mounted) return;
       if (profile == null || !profile.isProfileComplete) {
         context.go('/setup');
+      } else if (profile.age != null && profile.age! < 18) {
+        // Existing user with age below 18 — must update in setup screen
+        context.go('/setup');
       } else {
         context.go('/home');
       }
