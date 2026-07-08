@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Tark Peer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 24px 20px 60px;
+      color: #0B1422;
+      background: #fff;
+      line-height: 1.7;
+    }
+    h1 { color: #4171B8; font-size: 1.8rem; margin-bottom: 4px; }
+    h2 { color: #4171B8; font-size: 1.15rem; margin-top: 36px; border-bottom: 2px solid #E8EEF8; padding-bottom: 6px; }
+    .meta { color: #6B7280; font-size: 0.85rem; margin-bottom: 32px; }
+    p, li { color: #374151; }
+    a { color: #4171B8; }
+    ul { padding-left: 20px; }
+    .contact { background: #E8EEF8; border-radius: 10px; padding: 16px 20px; margin-top: 32px; }
+  </style>
+</head>
+<body>
+
+<!-- TODO: legal entity name -->
+
+<h1>Privacy Policy</h1>
+<p class="meta">Last updated: July 9, 2026 &nbsp;|&nbsp; Tark Peer</p>
+
+<p>
+  This Privacy Policy describes how Tark Peer ("<strong>we</strong>", "<strong>our</strong>", or "<strong>the app</strong>")
+  collects, uses, and protects information about you when you use the Tark Peer mobile application.
+  By using the app, you agree to the practices described in this policy.
+</p>
+
+<h2>1. Who Can Use Tark Peer</h2>
+<p>
+  Tark Peer is intended for users who are <strong>18 years of age or older</strong>.
+  We do not knowingly collect personal information from persons under 18.
+  If we learn that a user under 18 has provided personal information, we will delete it promptly.
+</p>
+
+<h2>2. Information We Collect</h2>
+<p>We collect the following categories of information:</p>
+<ul>
+  <li><strong>Account information:</strong> Email address, display name, and password (stored as a hash by Supabase Auth).</li>
+  <li><strong>Profile information:</strong> Age, gender, country, state/region, occupation, sector, mother tongue, and optional bio text.</li>
+  <li><strong>Avatar:</strong> You select from a preset collection of DiceBear-generated avatar images. No custom photos are uploaded.</li>
+  <li><strong>Call metadata:</strong> Call timestamps (start/end), call duration (in seconds), and ratings given after calls. Call history is stored to power your Progress tab statistics.</li>
+  <li><strong>Chat messages:</strong> Text messages sent to friends within the app. All messages are automatically deleted after 24 hours.</li>
+  <li><strong>Presence data:</strong> Online/offline/in-call status, updated in real time and not stored beyond your session.</li>
+  <li><strong>Moderation data:</strong> Reports you submit against other users, and any restriction or block actions you take.</li>
+  <li><strong>Device token:</strong> Firebase Cloud Messaging (FCM) token used to deliver push notifications. Stored against your account and deleted when you delete your account.</li>
+</ul>
+
+<h2>3. What We Do NOT Collect</h2>
+<ul>
+  <li><strong>Voice audio is not recorded or stored.</strong> Voice calls are transmitted in real time through Agora's peer-to-peer infrastructure and are never written to disk by us.</li>
+  <li>We do not collect precise GPS location. Country and state are entered manually by you.</li>
+  <li>We do not collect device identifiers (IMEI, advertising ID, etc.).</li>
+</ul>
+
+<h2>4. How We Use Your Information</h2>
+<ul>
+  <li>To create and manage your account.</li>
+  <li>To match you with conversation partners (profile fields are shared with matched partners).</li>
+  <li>To deliver real-time voice calls via Agora.</li>
+  <li>To enable friend connections, in-app chat, and direct calls.</li>
+  <li>To display progress statistics (total calls, streak, ratings).</li>
+  <li>To send push notifications about matches, friend requests, and peak-hour reminders.</li>
+  <li>To enforce our community standards through moderation (reports and restrictions).</li>
+  <li>To improve the app through aggregate, non-personal usage analytics.</li>
+</ul>
+
+<h2>5. Third-Party Service Processors</h2>
+<p>We share data with the following third parties strictly for operating the service:</p>
+<ul>
+  <li>
+    <strong>Supabase</strong> (supabase.com) — Database, authentication, and real-time messaging.
+    Your profile, call history, messages, and authentication credentials are stored on Supabase infrastructure.
+    <a href="https://supabase.com/privacy" target="_blank">Supabase Privacy Policy</a>
+  </li>
+  <li>
+    <strong>Agora</strong> (agora.io) — Real-time voice transmission.
+    Agora processes voice audio in transit. Audio is not retained beyond the call duration.
+    <a href="https://www.agora.io/en/privacy-policy/" target="_blank">Agora Privacy Policy</a>
+  </li>
+  <li>
+    <strong>Render.com</strong> — Cloud hosting for our backend API server.
+    Render processes API requests on our behalf.
+    <a href="https://render.com/privacy" target="_blank">Render Privacy Policy</a>
+  </li>
+  <li>
+    <strong>Google Firebase</strong> (Firebase Cloud Messaging) — Push notifications.
+    FCM device tokens are sent to Firebase to deliver notifications.
+    <a href="https://firebase.google.com/support/privacy" target="_blank">Firebase Privacy Policy</a>
+  </li>
+  <li>
+    <strong>DiceBear</strong> (dicebear.com) — Avatar image generation.
+    Avatar URLs are fetched from DiceBear's public CDN. No personal data is sent.
+    <a href="https://dicebear.com/legal/privacy-policy/" target="_blank">DiceBear Privacy Policy</a>
+  </li>
+  <li>
+    <strong>Google Play Services</strong> — App distribution and in-app update mechanisms on Android devices.
+  </li>
+</ul>
+
+<h2>6. Data Retention</h2>
+<ul>
+  <li>Chat messages are automatically deleted after <strong>24 hours</strong>.</li>
+  <li>Call history (metadata only) is retained until you delete your account.</li>
+  <li>Profile data is retained until you delete your account.</li>
+  <li>Reports you have submitted are retained for moderation purposes even after account deletion; reports made against you may be retained for safety reasons.</li>
+  <li>FCM tokens are deleted when you log out or delete your account.</li>
+</ul>
+
+<h2>7. Account Deletion</h2>
+<p>
+  You can permanently delete your account at any time from inside the app:
+  <strong>Profile → Delete Account</strong>.
+</p>
+<p>
+  Deletion removes your profile, display name, chat messages, friend relationships, call ratings, and block/report data you created.
+  Call history rows involving you are anonymised (your name will show as "Unknown" in your former partners' history).
+  Deletion is immediate and <strong>irreversible</strong>.
+</p>
+<p>
+  You may also request deletion by email at
+  <a href="mailto:support@tarkpeer.example">support@tarkpeer.example</a>.
+  We will process emailed deletion requests within 30 days.
+</p>
+
+<h2>8. Data Security</h2>
+<p>
+  All data is transmitted over HTTPS/TLS. Supabase uses row-level security (RLS) policies so each user
+  can only access data they are authorised to see. We do not store passwords — authentication is handled
+  by Supabase Auth using industry-standard hashing.
+</p>
+
+<h2>9. Your Rights</h2>
+<p>Depending on your jurisdiction, you may have the right to:</p>
+<ul>
+  <li>Access the personal data we hold about you.</li>
+  <li>Request correction of inaccurate data.</li>
+  <li>Request deletion of your data.</li>
+  <li>Object to certain uses of your data.</li>
+  <li>Lodge a complaint with a supervisory authority.</li>
+</ul>
+<p>To exercise any of these rights, contact us at <a href="mailto:support@tarkpeer.example">support@tarkpeer.example</a>.</p>
+
+<h2>10. Applicable Law</h2>
+<p>
+  This policy is governed by and construed in accordance with the laws of India.
+  Where applicable, we comply with the <strong>Information Technology Act, 2000</strong> and its rules,
+  and the <strong>Digital Personal Data Protection Act, 2023 (DPDP Act)</strong>.
+</p>
+
+<h2>11. Changes to This Policy</h2>
+<p>
+  We may update this Privacy Policy from time to time. We will notify you of significant changes via
+  an in-app notice. Continued use of the app after changes constitutes acceptance of the updated policy.
+</p>
+
+<div class="contact">
+  <strong>Contact us:</strong><br>
+  Tark Peer<br>
+  <!-- TODO: legal entity name --><br>
+  Email: <a href="mailto:support@tarkpeer.example">support@tarkpeer.example</a>
+</div>
+
+</body>
+</html>

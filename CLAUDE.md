@@ -98,9 +98,9 @@ Additional social features: friend requests, direct friend-to-friend calls, real
 - `GET /health` — returns `{"status": "ok", "service": "tark-peer"}`
 - `GET /stats` — returns `{total_users, online, waiting, active_calls, offline}`. `online = waiting + active_rooms * 2`. Reads from Redis ZSET card counts.
 
-**Routers included:** `auth`, `profile`, `call`, `match`, `room`
+**Routers included:** `auth`, `profile`, `call`, `match`, `room`, `moderation`
 
-**CORS:** `allow_origins=["*"]`
+**CORS:** `allow_origins=["*"]`, `allow_methods=["GET", "POST", "PUT", "DELETE"]`
 
 ---
 
@@ -143,6 +143,18 @@ Both verify against Supabase's auth service using the service key client.
 
 ---
 
+### `backend/routers/moderation.py` — `/report` Router
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/report` | POST | Body: `{reported_id, reason, room_id?, details?}`. Rate limited (10 per hour per user). Inserts to `reports` table. Auto-restriction: if ≥5 distinct reporters within 7 days, sets Redis key `restricted:{reported_id}` with 72h TTL. |
+
+**Valid reasons:** `hate_speech`, `harassment`, `inappropriate_content`, `spam_or_advertising`, `fake_profile`, `other`.
+
+**Auto-restriction threshold:** `_RESTRICTION_THRESHOLD = 5`, `_RESTRICTION_TTL = 72 * 3600`.
+
+---
+
 ### `backend/routers/auth.py` — `/auth` Router
 
 | Endpoint | Method | Description |
@@ -158,7 +170,8 @@ All endpoints use `Authorization: Bearer <token>` header.
 | Endpoint | Method | Description |
 |---|---|---|
 | `/profile/me` | GET | Returns caller's full profile row from `profiles` |
-| `/profile/me` | PUT | Updates profile fields (non-null only). Sets `updated_at = now()` |
+| `/profile/me` | PUT | Updates profile fields (non-null only). Sets `updated_at = now()`. Rejects `age < 18` with 422. |
+| `/profile/me` | DELETE | Deletes account. Cascades: messages, friendships, call_ratings, blocks, reports (as reporter), room_members, user_presence, profiles row, Supabase auth user, Redis cleanup. Each step uses `_try(label, fn)` helper to log-and-continue on failure. |
 | `/profile/history` | GET | Returns last 50 `call_history` rows where caller is `user_a` or `user_b`, ordered by `started_at` DESC. **Flutter does NOT use this endpoint** — it fetches call history directly from Supabase via `ProfileService.getCallHistory()` with a `.limit(10)` |
 | `/profile/{user_id}` | GET | Returns public profile (`id, name, age, gender, bio, avatar_url, is_premium`) for any user |
 
@@ -383,6 +396,8 @@ flutter_app/lib/
 │   ├── direct_call_service.dart   — singleton, subscribe/unsubscribe incoming calls, initiateCall
 │   ├── room_service.dart          — createRoom, joinRoom, leaveRoom, getPublicRooms, getRoomMembers
 │   ├── rating_service.dart        — POST /call/rate wrapper
+│   ├── report_service.dart        — POST /report wrapper
+│   ├── block_service.dart         — blockUser, unblockUser, getBlockedUsers, isBlocked, getBlockedUserIds
 │   ├── update_service.dart        — GitHub releases version check + APK download
 │   ├── topic_progress_service.dart — SharedPrefs-backed topic practiced tracking
 │   ├── game_progress_service.dart  — SharedPrefs-backed game stars, best scores, streak
@@ -400,7 +415,8 @@ flutter_app/lib/
 │   │   ├── profile_screen.dart
 │   │   ├── friends_screen.dart
 │   │   ├── friend_profile_screen.dart
-│   │   └── call_history_screen.dart
+│   │   ├── call_history_screen.dart
+│   │   └── blocked_users_screen.dart
 │   ├── home/
 │   │   ├── home_screen.dart        — 4-tab shell (Learn, Practice, Games, Progress)
 │   │   ├── learn_tab.dart
@@ -431,6 +447,7 @@ flutter_app/lib/
     ├── custom_button.dart          — Loading-aware full-width ElevatedButton
     ├── partner_profile_sheet.dart  — Bottom sheet: partner info + Add Friend
     ├── avatar_picker_sheet.dart    — Grid of preset DiceBear avatars
+    ├── report_sheet.dart           — Bottom sheet: 6 reason radios + optional details text, submits to ReportService
     └── filter_bottom_sheet.dart    — Match filter sheet (gender/age/rating — currently locked as Premium)
 ```
 
@@ -465,6 +482,7 @@ flutter_app/lib/
 | `/rooms/join` | `JoinRoomScreen` | 6-char uppercase code input |
 | `/rooms/public` | `PublicRoomsScreen` | List of active public rooms with join button |
 | `/rooms/lobby` | `RoomLobbyScreen` | Live room: member slot grid, speaking glow, mic/speaker controls. **`state.extra` = `RoomInfo` (required)** |
+| `/blocked` | `BlockedUsersScreen` | List of blocked users with Unblock buttons |
 
 ---
 
@@ -671,6 +689,17 @@ HTTP calls to backend room endpoints. All methods use `AuthService().accessToken
 ### RatingService
 - POST `/call/rate` with `{channel_name, rated_user_id, stars}`.
 
+### ReportService
+- `reportUser({required reportedId, roomId?, required reason, details?})` → POST `/report` with Bearer token. Returns `bool` (true on 200/201).
+
+### BlockService
+Uses Supabase client directly (not backend HTTP).
+- `blockUser(userId)` — inserts block row + deletes any friendship row with that user (both directions).
+- `unblockUser(userId)` — deletes block row.
+- `getBlockedUsers()` — 2-step: fetch blocks where `blocker_id=me`, batch-fetch blocked user profiles. Returns `List<Map>` with `blocked_user_profile` merged.
+- `isBlocked(userId)` — checks both directions (me→them OR them→me).
+- `getBlockedUserIds()` — returns `Set<String>` of all user IDs blocked in either direction. Used by `ChatListScreen` to filter out blocked friends.
+
 ### UpdateService
 - Polls `https://api.github.com/repos/Vijayvsnv/tark-peer/releases/latest` on home screen load (2s delay).
 - Compares semver: `current < latest` → returns `{version, url}`.
@@ -709,6 +738,9 @@ Bottom sheet: partner name, bio, location, occupation/sector, friendship status.
 
 ### AvatarPickerSheet
 Grid of `kPresetAvatars` (DiceBear URLs). Returns selected URL to caller via `Navigator.pop(context, url)`.
+
+### ReportSheet
+Bottom sheet that takes `reportedId`, `reportedName`, and optional `roomId`. Shows 6 reason radio tiles (hate_speech, harassment, inappropriate_content, spam_or_advertising, fake_profile, other) plus an optional details `TextField` (max 300 chars). Submit calls `ReportService` → on success pops with `true` so callers can show a snackbar. `ReportService` POSTs to `$kBackendUrl/report` with Bearer token.
 
 ### FilterBottomSheet (`filter_bottom_sheet.dart`)
 Shows gender/age range/rating filters. **All three sections are currently locked as "Premium" features** — tapping any filter shows a snackbar. The "Start Searching" button always returns a `MatchFilter` with null values (no filtering applied). The sheet UI is rendered but non-functional until premium is implemented.
@@ -887,6 +919,31 @@ Upserted by client directly (anon key with RLS to own row only).
 | `expires_at` | timestamptz | 2 hours from creation — backend scanner marks ended |
 
 RLS: SELECT open to all authenticated. UPDATE restricted to host. INSERT/DELETE via service key only (backend).
+
+### `reports`
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | PK |
+| `reporter_id` | uuid | FK → profiles |
+| `reported_id` | uuid | FK → profiles |
+| `reason` | text | CHECK: one of 6 valid reasons |
+| `details` | text | Optional additional context |
+| `room_id` | text | Optional: call channel name if report from a call |
+| `created_at` | timestamptz | |
+
+Constraints: `no_self_report` CHECK (`reporter_id != reported_id`). RLS: INSERT for own row only (no SELECT for users — moderation only).
+
+### `blocks`
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | PK |
+| `blocker_id` | uuid | FK → profiles |
+| `blocked_id` | uuid | FK → profiles |
+| `created_at` | timestamptz | |
+
+Constraints: UNIQUE(`blocker_id`, `blocked_id`), `no_self_block` CHECK (`blocker_id != blocked_id`). RLS: SELECT/INSERT/DELETE for own `blocker_id` only.
+
+Migration file: `backend/migrations/001_reports_blocks.sql` — must be run manually in Supabase SQL editor.
 
 ### `room_members`
 | Column | Type | Notes |
@@ -1103,3 +1160,25 @@ Backend clears ALL transient Redis keys (`waiting_queue`, `active_rooms`, `user_
 
 ### 16. Chat Messages — 24h Expiry
 Messages have `expires_at` set server-side (24h from creation). Queries filter `expires_at > now()`. Backend runs `delete_expired_messages` Supabase RPC hourly to actually purge rows.
+
+### 17. Block Set in Matchmaking — Redis SET with Sentinel
+`_get_blockset(user_id)` in `match.py` caches the user's full block set in Redis (`blockset:{user_id}`) as a SET with a `__cached__` sentinel member. Why: a missing Redis key is ambiguous (never fetched OR empty set). The sentinel means "we already fetched and the set was empty." Expire: 300s. `_matcher_loop` skips any candidate whose `partner_id in block_set` (set excludes sentinel).
+
+### 18. Restriction Check in Matchmaking
+On WS connect, after `already_in_call` check, backend reads `restricted:{user_id}` from Redis. If present (set by auto-restriction logic in `POST /report`), sends `{"type": "restricted", "message": "..."}` and closes WS. `MatchingScreen` handles `"restricted"` event type: cancels timer, shows AlertDialog, on OK goes home.
+
+### 19. 18+ Age Gate — Three Enforcement Points
+1. **Signup screen**: checkbox "I am 18+ years old" — `CustomButton` disabled if unchecked. Links open `privacy.html` and `terms.html` via `url_launcher`.
+2. **SetupScreen**: age validator rejects `< 18` (was `< 13` before).
+3. **Backend `PUT /profile/me`**: rejects `age < 18` with 422.
+**SplashScreen** also checks: if profile has `age < 18`, redirects to `/setup` rather than `/home`.
+
+### 20. Account Deletion — Two-Step Flow
+`ProfileScreen._startDeleteFlow()`: Step 1 = AlertDialog explaining consequences. Step 2 = type "DELETE" in TextField (StatefulBuilder tracks `canDelete` state). On confirm: `http.delete('$kBackendUrl/profile/me')` → on 200: `_auth.signOut()` + `SharedPreferences.clear()` + `context.go('/login')`.
+Backend `DELETE /profile/me` uses `_try(label, fn)` helper to ensure all cleanup steps run even if one fails. Redis cleanup includes: `user_room:*`, `waiting_queue` ZREM, `blockset:*`, `restricted:*`.
+
+### 21. Report → Block → End Call Flow (CallScreen)
+After reporting from CallScreen: `_openReportSheet()` calls `ReportService`, on success shows `_showPostReportDialog()` — AlertDialog with 3 choices: Stay / Block / End Call. Block and End Call both internally call `_endCall()` first (block also calls `_blockService.blockUser()`).
+
+### 22. Legal Pages
+`speakr-app/legal/privacy.html` and `terms.html` are production-ready static HTML pages for GitHub Pages hosting. URLs hardcoded in `constants.dart` as `kPrivacyPolicyUrl` and `kTermsUrl`. Both contain `<!-- TODO: legal entity name -->` placeholder. Contact email is `support@tarkpeer.example` (placeholder).
