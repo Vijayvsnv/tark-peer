@@ -273,13 +273,27 @@ async def websocket_match(
             pass
         return
 
+    # Restriction check: user may be temporarily banned due to reports
+    restricted = await redis_client.redis.get(f"restricted:{user_id}")
+    if restricted:
+        await _send_ws(websocket, {
+            "type": "restricted",
+            "message": "Your account is temporarily restricted due to reports",
+        })
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+        return
+
     user_filter = _parse_filter(gender, age_range, min_rating, max_rating)
+    block_set = await _get_blockset(user_id)
 
     await redis_client.add_to_queue(user_id)
     await _send_ws(websocket, {"type": "waiting"})
 
     _active_ws[user_id] = websocket
-    matcher = asyncio.create_task(_matcher_loop(user_id, websocket, user_filter))
+    matcher = asyncio.create_task(_matcher_loop(user_id, websocket, user_filter, block_set))
 
     try:
         while True:
@@ -307,16 +321,59 @@ async def websocket_match(
             pass
 
 
-async def _matcher_loop(user_id: str, websocket: WebSocket, user_filter: Optional[dict] = None):
+async def _get_blockset(user_id: str) -> set:
+    """Return the set of user IDs blocked by or blocking `user_id`, cached in Redis for 300s."""
+    cache_key = f"blockset:{user_id}"
+    exists = await redis_client.redis.exists(cache_key)
+    if exists:
+        members = await redis_client.redis.smembers(cache_key)
+        return {m for m in members if m != "__cached__"}
+
+    excluded: set = set()
+    try:
+        resp = (
+            supabase_admin.table("blocks")
+            .select("blocker_id,blocked_id")
+            .or_(f"blocker_id.eq.{user_id},blocked_id.eq.{user_id}")
+            .execute()
+        )
+        for row in (resp.data or []):
+            other = row["blocker_id"] if row["blocker_id"] != user_id else row["blocked_id"]
+            if other != user_id:
+                excluded.add(other)
+    except Exception as e:
+        logger.warning("blockset fetch failed for %s: %r", user_id, e)
+
+    to_add = {"__cached__"} | excluded
+    await redis_client.redis.sadd(cache_key, *to_add)
+    await redis_client.redis.expire(cache_key, 300)
+    return excluded
+
+
+async def _matcher_loop(
+    user_id: str,
+    websocket: WebSocket,
+    user_filter: Optional[dict] = None,
+    block_set: Optional[set] = None,
+):
     """
     Background task per WS connection.  Polls Redis on a fixed cadence trying
-    to claim a partner.  Applies filter check before confirming a match —
-    incompatible partners are returned to the queue.
+    to claim a partner.  Applies filter check and block check before confirming
+    a match — incompatible or blocked partners are returned to the queue.
     """
+    if block_set is None:
+        block_set = set()
     try:
         while True:
             partner_id = await redis_client.find_partner(user_id)
             if not partner_id:
+                await asyncio.sleep(_MATCH_POLL_INTERVAL_S)
+                continue
+
+            # Block check — either user has blocked the other; put back and skip.
+            if partner_id in block_set:
+                logger.info("block skip: %s skipped blocked partner %s", user_id, partner_id)
+                await redis_client.add_to_queue(partner_id)
                 await asyncio.sleep(_MATCH_POLL_INTERVAL_S)
                 continue
 

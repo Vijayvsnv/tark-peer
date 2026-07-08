@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../models/user_profile.dart';
+import '../../services/block_service.dart';
 import '../../services/profile_service.dart';
+import '../../widgets/report_sheet.dart';
 import '../../widgets/user_avatar.dart';
 
 class FriendProfileScreen extends StatefulWidget {
@@ -16,6 +18,7 @@ class FriendProfileScreen extends StatefulWidget {
 
 class _FriendProfileScreenState extends State<FriendProfileScreen> {
   final _profileService = ProfileService();
+  final _blockService = BlockService();
   UserProfile? _profile;
   bool _loading = true;
 
@@ -49,6 +52,22 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
           style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: kTextPrimary),
+            onSelected: (value) {
+              if (value == 'report') _openReportSheet();
+              if (value == 'block') _confirmBlock();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'report', child: Text('Report')),
+              PopupMenuItem(
+                value: 'block',
+                child: Text('Block', style: TextStyle(color: kDanger)),
+              ),
+            ],
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kPrimary))
@@ -123,6 +142,84 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                   ),
                 ),
     );
+  }
+
+  Future<void> _openReportSheet() async {
+    if (_profile == null) return;
+    final success = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => ReportSheet(
+        reportedId: widget.userId,
+        reportedName: _profile!.name,
+      ),
+    );
+    if (success == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Report submitted. Thank you for keeping Tark Peer safe.'),
+          backgroundColor: kSuccess,
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmBlock() async {
+    if (_profile == null) return;
+    final name = _profile!.name;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Block User',
+          style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Block $name? They will not be able to match or chat with you. This will also remove the friendship.',
+          style: const TextStyle(color: kTextSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: kTextSecondary, fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kDanger,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            child: const Text('Block'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    try {
+      await _blockService.blockUser(widget.userId);
+      if (mounted) {
+        context.pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$name blocked.'), backgroundColor: kDanger),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to block. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _detailsCard() {

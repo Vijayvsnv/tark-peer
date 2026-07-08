@@ -141,6 +141,25 @@ async def direct_call(body: DirectCallBody, authorization: str = Header(...)):
         logger.warning("friendship check failed: %r", e)
         raise HTTPException(status_code=403, detail="You can only call friends")
 
+    # Block check: neither user should have blocked the other
+    try:
+        block_resp = (
+            supabase_admin.table("blocks")
+            .select("id")
+            .or_(
+                f"and(blocker_id.eq.{caller_id},blocked_id.eq.{body.receiver_id}),"
+                f"and(blocker_id.eq.{body.receiver_id},blocked_id.eq.{caller_id})"
+            )
+            .limit(1)
+            .execute()
+        )
+        if block_resp.data:
+            raise HTTPException(status_code=403, detail="Unable to call this user")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning("block check failed in direct call: %r", e)
+
     channel_name = str(uuid4())
     token_c, uid_c = generate_token(channel_name, caller_id, settings.agora_app_id, settings.agora_app_certificate)
     token_r, uid_r = generate_token(channel_name, body.receiver_id, settings.agora_app_id, settings.agora_app_certificate)

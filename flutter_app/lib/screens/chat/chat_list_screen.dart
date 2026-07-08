@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
 import '../../models/match_event.dart';
+import '../../services/block_service.dart';
 import '../../services/direct_call_service.dart';
 import '../../services/friend_service.dart';
 import '../../services/message_service.dart';
@@ -24,6 +25,7 @@ class ChatListScreen extends StatefulWidget {
 
 class _ChatListScreenState extends State<ChatListScreen> {
   final _friendService = FriendService();
+  final _blockService = BlockService();
   final _messageService = MessageService();
   final _presenceService = PresenceService();
 
@@ -41,7 +43,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   Future<void> _load() async {
     final myId = Supabase.instance.client.auth.currentUser!.id;
-    final friends = await _friendService.getFriends();
+    final allFriends = await _friendService.getFriends();
+    final blockedIds = await _blockService.getBlockedUserIds();
+    final friends = allFriends
+        .where((f) => !blockedIds.contains(_partnerId(f, myId)))
+        .toList();
     if (!mounted) return;
     setState(() {
       _friends = friends;

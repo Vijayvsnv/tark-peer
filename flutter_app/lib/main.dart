@@ -34,6 +34,7 @@ import 'screens/rooms/create_room_screen.dart';
 import 'screens/rooms/join_room_screen.dart';
 import 'screens/rooms/public_rooms_screen.dart';
 import 'screens/rooms/room_lobby_screen.dart';
+import 'screens/profile/blocked_users_screen.dart';
 import 'models/room_models.dart';
 
 @pragma('vm:entry-point')
@@ -135,6 +136,7 @@ final _router = GoRouter(
       path: '/rooms/lobby',
       builder: (_, state) => RoomLobbyScreen(room: state.extra as RoomInfo),
     ),
+    GoRoute(path: '/blocked', builder: (_, __) => const BlockedUsersScreen()),
   ],
 );
 

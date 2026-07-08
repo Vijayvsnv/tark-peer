@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../core/theme.dart';
+import '../services/block_service.dart';
 import '../services/friend_service.dart';
+import 'report_sheet.dart';
 
 class PartnerProfileSheet extends StatefulWidget {
   final String partnerId;
@@ -29,6 +31,7 @@ class PartnerProfileSheet extends StatefulWidget {
 }
 
 class _PartnerProfileSheetState extends State<PartnerProfileSheet> {
+  final _blockService = BlockService();
   String? _status;
   bool _loading = true;
 
@@ -121,9 +124,110 @@ class _PartnerProfileSheetState extends State<PartnerProfileSheet> {
           ],
           const SizedBox(height: 24),
           _buildAction(),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton(
+                onPressed: _openReportSheet,
+                style: TextButton.styleFrom(foregroundColor: kDanger),
+                child: const Text(
+                  'Report',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: _confirmBlock,
+                style: TextButton.styleFrom(foregroundColor: kDanger),
+                child: const Text(
+                  'Block',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _openReportSheet() async {
+    final success = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => ReportSheet(
+        reportedId: widget.partnerId,
+        reportedName: widget.name,
+      ),
+    );
+    if (success == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Report submitted. Thank you for keeping Tark Peer safe.'),
+          backgroundColor: kSuccess,
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmBlock() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Block User',
+          style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Block ${widget.name}? They will not be able to match or chat with you.',
+          style: const TextStyle(color: kTextSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: kTextSecondary, fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kDanger,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            child: const Text('Block'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    try {
+      await _blockService.blockUser(widget.partnerId);
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${widget.name} blocked.'),
+            backgroundColor: kDanger,
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to block. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildAction() {
