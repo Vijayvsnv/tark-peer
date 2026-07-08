@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import auth, call, match, notify, profile, room
+from routers import auth, call, match, moderation, notify, profile, room
 from services import redis_client
 from services.supabase_client import supabase_admin
 from services.supabase_realtime import broadcast
@@ -193,7 +193,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -203,6 +203,7 @@ app.include_router(call.router)
 app.include_router(match.router)
 app.include_router(room.router)
 app.include_router(notify.router)
+app.include_router(moderation.router)
 
 
 @app.get("/health")

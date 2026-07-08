@@ -1,5 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../models/user_profile.dart';
 import '../../services/auth_service.dart';
@@ -115,6 +119,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     label: 'Rooms',
                     onTap: () => context.push('/rooms'),
                   ),
+                  const SizedBox(height: 10),
+                  _navCard(
+                    context,
+                    icon: Icons.block,
+                    label: 'Blocked Users',
+                    onTap: () => context.push('/blocked'),
+                  ),
                   const SizedBox(height: 28),
                   _navCard(
                     context,
@@ -122,11 +133,168 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     label: 'Logout',
                     onTap: _confirmLogout,
                   ),
+                  const SizedBox(height: 10),
+                  _navCard(
+                    context,
+                    icon: Icons.delete_forever_outlined,
+                    label: 'Delete Account',
+                    onTap: _startDeleteFlow,
+                    danger: true,
+                  ),
                   const SizedBox(height: 20),
                 ],
               ),
             ),
     );
+  }
+
+  Future<void> _startDeleteFlow() async {
+    // Step 1: explain consequences
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Delete Account',
+          style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'This permanently deletes your profile, friends, messages and progress. This cannot be undone.',
+          style: TextStyle(color: kTextSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: kTextSecondary, fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kDanger,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (proceed != true || !mounted) return;
+
+    // Step 2: type DELETE to confirm
+    final confirmCtrl = TextEditingController();
+    bool canDelete = false;
+    bool deleting = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (_, setS) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Confirm Deletion',
+            style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Type DELETE to confirm:',
+                style: TextStyle(color: kTextSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: confirmCtrl,
+                style: const TextStyle(color: kTextPrimary, fontWeight: FontWeight.w700),
+                onChanged: (v) => setS(() => canDelete = v.trim() == 'DELETE'),
+                decoration: InputDecoration(
+                  hintText: 'DELETE',
+                  hintStyle: const TextStyle(color: kTextMuted),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: deleting ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: kTextSecondary, fontWeight: FontWeight.w600)),
+            ),
+            ElevatedButton(
+              onPressed: (!canDelete || deleting)
+                  ? null
+                  : () async {
+                      setS(() => deleting = true);
+                      final token = _auth.accessToken;
+                      if (token == null) {
+                        setS(() => deleting = false);
+                        return;
+                      }
+                      try {
+                        final resp = await http.delete(
+                          Uri.parse('$kBackendUrl/profile/me'),
+                          headers: {'Authorization': 'Bearer $token'},
+                        );
+                        if (!ctx.mounted) return;
+                        if (resp.statusCode == 200) {
+                          Navigator.pop(ctx);
+                          await _auth.signOut();
+                          final prefs = await SharedPreferences.getInstance();
+                          await prefs.clear();
+                          if (mounted) {
+                            context.go('/login');
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Your account has been deleted.'),
+                                backgroundColor: kDanger,
+                              ),
+                            );
+                          }
+                        } else {
+                          setS(() => deleting = false);
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                              content: Text('Deletion failed. Please try again.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      } catch (_) {
+                        if (ctx.mounted) setS(() => deleting = false);
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                              content: Text('Network error. Please try again.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kDanger,
+                disabledBackgroundColor: kDanger.withOpacity(0.3),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
+              child: deleting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Delete Forever'),
+            ),
+          ],
+        ),
+      ),
+    );
+    confirmCtrl.dispose();
   }
 
   Future<void> _confirmLogout() async {
@@ -171,7 +339,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required IconData icon,
     required String label,
     required VoidCallback onTap,
+    bool danger = false,
   }) {
+    final color = danger ? kDanger : kPrimary;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -180,24 +350,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: kPrimary, width: 1.5),
+          border: Border.all(color: color, width: 1.5),
         ),
         child: Row(
           children: [
             Container(
               width: 38,
               height: 38,
-              decoration: const BoxDecoration(color: kPrimary, shape: BoxShape.circle),
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
               child: Icon(icon, color: Colors.white, size: 20),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(color: kTextPrimary, fontSize: 15, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: danger ? kDanger : kTextPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-            const Icon(Icons.chevron_right, color: kPrimary, size: 22),
+            Icon(Icons.chevron_right, color: color, size: 22),
           ],
         ),
       ),
