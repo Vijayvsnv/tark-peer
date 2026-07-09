@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import auth, call, match, moderation, notify, profile, room
+from routers import ai_partner, auth, call, match, moderation, notify, profile, room
 from services import redis_client
 from services.supabase_client import supabase_admin
 from services.supabase_realtime import broadcast
@@ -204,6 +204,7 @@ app.include_router(match.router)
 app.include_router(room.router)
 app.include_router(notify.router)
 app.include_router(moderation.router)
+app.include_router(ai_partner.router)
 
 
 @app.get("/health")
