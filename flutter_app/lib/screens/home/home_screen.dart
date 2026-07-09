@@ -386,6 +386,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   style: TextStyle(color: kTextSecondary, fontSize: 14),
                 ),
                 const SizedBox(height: 14),
+                OutlinedButton.icon(
+                  onPressed: () => context.push('/ai-call'),
+                  icon: const Text('🤖', style: TextStyle(fontSize: 15)),
+                  label: const Text(
+                    'Practice with Shivani (AI Partner)',
+                    style: TextStyle(
+                      color: kPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: kPrimary.withOpacity(0.5), width: 1.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                  ),
+                ),
+                const SizedBox(height: 14),
                 _LiveStatsRow(
                   waiting: _waiting,
                   online: _online,

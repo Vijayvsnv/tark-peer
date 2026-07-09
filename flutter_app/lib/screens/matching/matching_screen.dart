@@ -5,11 +5,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../models/match_event.dart';
 import '../../models/match_filter.dart';
+import '../../services/ai_partner_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/match_service.dart';
+import '../../widgets/user_avatar.dart';
 
 class MatchingScreen extends StatefulWidget {
   final MatchFilter? filter;
@@ -22,11 +25,14 @@ class MatchingScreen extends StatefulWidget {
 class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStateMixin {
   late MatchService _matchService;
   final _auth = AuthService();
+  final _aiService = AiPartnerService();
+
   late AnimationController _pulseCtrl;
   late Animation<double> _pulse;
   late AnimationController _celebrateCtrl;
   late Animation<double> _celebrateScale;
   final _confettiCtrl = ConfettiController(duration: const Duration(milliseconds: 1200));
+
   StreamSubscription? _sub;
   bool _cancelling = false;
   bool _timedOut = false;
@@ -35,6 +41,13 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
   Timer? _timer;
   bool _matched = false;
   MatchEvent? _matchedEvent;
+
+  // AI partner offer state
+  bool _aiOfferVisible = false;       // slide-up card shown at 45s
+  bool _autoConnectActive = false;    // countdown card active (remaining <= 10)
+  bool _autoConnectCancelled = false; // user cancelled the countdown
+  bool _checkingQuota = false;
+  int _aiQuotaRemaining = kAiDailyLimit; // assume available until checked
 
   @override
   void initState() {
@@ -63,12 +76,43 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
       if (!mounted) return;
       setState(() {
         _remaining--;
+
+        // At 45s remaining: show AI offer card (first time only)
+        if (_remaining == 45 && !_aiOfferVisible && !_matched) {
+          _aiOfferVisible = true;
+        }
+
+        // At 10s remaining: check quota and start auto-connect countdown
+        if (_remaining == 10 && !_autoConnectCancelled && !_matched) {
+          _startAutoConnect();
+        }
+
+        // At 0: timeout
         if (_remaining <= 0) {
           _timer?.cancel();
-          _timeoutCancel();
+          _onTimeout();
         }
       });
     });
+  }
+
+  Future<void> _startAutoConnect() async {
+    if (_matched || _autoConnectCancelled) return;
+    setState(() => _checkingQuota = true);
+    try {
+      final quota = await _aiService.getQuota();
+      if (!mounted) return;
+      setState(() {
+        _aiQuotaRemaining = quota.remaining;
+        _checkingQuota = false;
+        // Only activate auto-connect if quota available and match not yet found
+        if (quota.remaining > 0 && !_matched) {
+          _autoConnectActive = true;
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => _checkingQuota = false);
+    }
   }
 
   Future<void> _connect() async {
@@ -145,7 +189,10 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
     _matched = true;
     _timer?.cancel();
     HapticFeedback.heavyImpact();
-    setState(() => _matchedEvent = event);
+    setState(() {
+      _matchedEvent = event;
+      _autoConnectActive = false; // cancel AI countdown — match wins
+    });
     _celebrateCtrl.forward(from: 0);
     _confettiCtrl.play();
     await Future.delayed(const Duration(milliseconds: 1400));
@@ -160,12 +207,39 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
     if (mounted) context.go('/home');
   }
 
-  Future<void> _timeoutCancel() async {
-    if (_cancelling || _matched) return;
+  void _cancelAutoConnect() {
+    setState(() {
+      _autoConnectCancelled = true;
+      _autoConnectActive = false;
+    });
+  }
+
+  void _onTimeout() {
+    if (_matched) return;
+    if (_cancelling) return;
+
+    _matchService.sendCancel();
+    _matchService.disconnect();
+
+    if (_autoConnectActive && !_autoConnectCancelled && _aiQuotaRemaining > 0) {
+      // Auto-connect to Shivani
+      context.go('/ai-call');
+    } else {
+      // Show plain timeout card
+      setState(() {
+        _cancelling = false;
+        _timedOut = true;
+      });
+    }
+  }
+
+  Future<void> _goToAiCall() async {
+    if (_cancelling) return;
     setState(() => _cancelling = true);
     _matchService.sendCancel();
-    await Future.delayed(const Duration(milliseconds: 200));
-    if (mounted) setState(() { _timedOut = true; _cancelling = false; });
+    _matchService.disconnect();
+    await Future.delayed(const Duration(milliseconds: 150));
+    if (mounted) context.go('/ai-call');
   }
 
   Future<void> _retry() async {
@@ -182,6 +256,11 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
       _matched = false;
       _matchedEvent = null;
       _retrying = false;
+      _aiOfferVisible = false;
+      _autoConnectActive = false;
+      _autoConnectCancelled = false;
+      _checkingQuota = false;
+      _aiQuotaRemaining = kAiDailyLimit;
     });
     _startTimer();
     await _connect();
@@ -295,9 +374,9 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFF8B0000)),
-                  SizedBox(width: 5),
-                  Text(
+                  const Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFF8B0000)),
+                  const SizedBox(width: 5),
+                  const Text(
                     'Non-English speakers will be banned',
                     style: TextStyle(
                       color: Color(0xFF8B0000),
@@ -323,21 +402,182 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
                 ),
               ),
             ),
-            if (_matchedEvent != null) _CelebrationOverlay(
-              event: _matchedEvent!,
-              scale: _celebrateScale,
-              confetti: _confettiCtrl,
+          ),
+
+          // AI offer slide-up card (at 45s, before auto-connect)
+          if (_aiOfferVisible && !_autoConnectActive && !_autoConnectCancelled &&
+              !_matched && !_timedOut && _remaining > 10)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: _AiOfferCard(
+                onTalkToShivani: _goToAiCall,
+                onDismiss: () => setState(() => _aiOfferVisible = false),
+              ),
             ),
-            if (_timedOut) _TimeoutCard(
-              retrying: _retrying,
-              onRetry: _retry,
-              onCancel: () => context.go('/home'),
+
+          // Auto-connect countdown card (at 10s)
+          if (_autoConnectActive && !_matched && !_timedOut)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: _AutoConnectCard(
+                countdown: _remaining,
+                checking: _checkingQuota,
+                onCancel: _cancelAutoConnect,
+              ),
             ),
+
+          if (_matchedEvent != null) _CelebrationOverlay(
+            event: _matchedEvent!,
+            scale: _celebrateScale,
+            confetti: _confettiCtrl,
+          ),
+          if (_timedOut) _TimeoutCard(
+            retrying: _retrying,
+            onRetry: _retry,
+            onCancel: () => context.go('/home'),
+            onTalkToShivani: _goToAiCall,
+          ),
         ],
       ),
     );
   }
 }
+
+// ─── AI offer card ───────────────────────────────────────────────────────────
+
+class _AiOfferCard extends StatelessWidget {
+  final VoidCallback onTalkToShivani;
+  final VoidCallback onDismiss;
+
+  const _AiOfferCard({required this.onTalkToShivani, required this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, -4)),
+        ],
+        border: Border.all(color: kCyan.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          ClipOval(
+            child: UserAvatar(imageUrl: kAiPartnerAvatar, name: kAiPartnerName, radius: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  'No partner yet…',
+                  style: TextStyle(color: kTextPrimary, fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Practice with Shivani (AI Partner) instead?',
+                  style: TextStyle(color: kTextSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: onTalkToShivani,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kCyan,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              elevation: 0,
+            ),
+            child: const Text('Talk to\nShivani', textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18, color: kTextMuted),
+            onPressed: onDismiss,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Auto-connect countdown card ─────────────────────────────────────────────
+
+class _AutoConnectCard extends StatelessWidget {
+  final int countdown;
+  final bool checking;
+  final VoidCallback onCancel;
+
+  const _AutoConnectCard({required this.countdown, required this.checking, required this.onCancel});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 20, offset: const Offset(0, -4)),
+        ],
+        border: Border.all(color: kCyan.withOpacity(0.5), width: 1.5),
+      ),
+      child: Row(
+        children: [
+          ClipOval(
+            child: UserAvatar(imageUrl: kAiPartnerAvatar, name: kAiPartnerName, radius: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: checking
+                ? const Text('Checking availability…',
+                    style: TextStyle(color: kTextSecondary, fontSize: 13))
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'No partner found —',
+                        style: TextStyle(color: kTextPrimary, fontSize: 13, fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        'Connecting to Shivani (AI Partner) in ${countdown}s…',
+                        style: const TextStyle(color: kTextSecondary, fontSize: 12),
+                      ),
+                    ],
+                  ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: onCancel,
+            style: TextButton.styleFrom(
+              foregroundColor: kDanger,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            child: const Text('Cancel', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Existing widgets (unchanged) ────────────────────────────────────────────
 
 class _CelebrationOverlay extends StatelessWidget {
   final MatchEvent event;
@@ -456,8 +696,14 @@ class _TimeoutCard extends StatelessWidget {
   final bool retrying;
   final VoidCallback onRetry;
   final VoidCallback onCancel;
+  final VoidCallback onTalkToShivani;
 
-  const _TimeoutCard({required this.retrying, required this.onRetry, required this.onCancel});
+  const _TimeoutCard({
+    required this.retrying,
+    required this.onRetry,
+    required this.onCancel,
+    required this.onTalkToShivani,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -495,7 +741,7 @@ class _TimeoutCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'No one was available right now.\nTry again or come back later.',
+                  'No one was available right now.\nTry again or practice with Shivani!',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: kTextSecondary, fontSize: 14, height: 1.5),
                 ),
@@ -504,7 +750,26 @@ class _TimeoutCard extends StatelessWidget {
                   '⏰  Peak hours: Evening 8–9 PM',
                   style: TextStyle(color: kTextMuted, fontSize: 12),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
+                // Shivani button — primary CTA
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: retrying ? null : onTalkToShivani,
+                    icon: const Text('🤖', style: TextStyle(fontSize: 16)),
+                    label: const Text(
+                      'Talk to Shivani (AI Partner)',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kCyan,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      elevation: 0,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 Row(
                   children: [
                     Expanded(
@@ -561,50 +826,36 @@ class _RingPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 14;
-    const sw = 13.0;
-    const startAngle = -pi / 2; // 12 o'clock
-
-    // Full grey background ring
+    final radius = size.width / 2 - 10;
+    final strokeWidth = 8.0;
+    final bgPaint = Paint()
+      ..color = const Color(0xFFE5E7EB)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+    canvas.drawCircle(center, radius, bgPaint);
+    const total = 90.0;
+    final fraction = (remaining / total).clamp(0.0, 1.0);
+    Color arcColor;
+    if (remaining > 60) {
+      arcColor = Colors.green;
+    } else if (remaining > 30) {
+      arcColor = Colors.amber;
+    } else {
+      arcColor = Colors.red;
+    }
+    final arcPaint = Paint()
+      ..color = arcColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
-      startAngle, 2 * pi, false,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = sw
-        ..color = Colors.grey.withOpacity(0.15),
+      -pi / 2,
+      2 * pi * fraction,
+      false,
+      arcPaint,
     );
-
-    if (remaining <= 0) return;
-
-    // How much of the ring has been "consumed" clockwise from 12 o'clock
-    final elapsed = 90 - remaining;
-    final consumed = (elapsed / 90.0) * 2 * pi;
-    const z = 2 * pi / 3; // 120° per zone
-    final rect = Rect.fromCircle(center: center, radius: radius);
-
-    Paint arc(Color c) => Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = sw
-      ..strokeCap = StrokeCap.round
-      ..color = c;
-
-    // Zones (fixed positions on ring):
-    //   Green  → 12 to 4 o'clock  [0,   z)   — erased first (90→61s)
-    //   Yellow → 4  to 8 o'clock  [z,  2z)   — erased second (60→31s)
-    //   Red    → 8  to 12 o'clock [2z, 3z)   — erased last   (30→0s)
-    //
-    // Draw only the portion of each zone that hasn't been consumed yet.
-    void drawZone(double zStart, double zEnd, Color color) {
-      final visStart = max(consumed, zStart);
-      final sweep = zEnd - visStart;
-      if (sweep <= 0) return;
-      canvas.drawArc(rect, startAngle + visStart, sweep, false, arc(color));
-    }
-
-    drawZone(0,   z,   Colors.green);
-    drawZone(z,  2*z,  Colors.amber);
-    drawZone(2*z, 3*z, Colors.red);
   }
 
   @override
