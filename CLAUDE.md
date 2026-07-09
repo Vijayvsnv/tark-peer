@@ -440,7 +440,7 @@ firebase-admin==6.5.0
 flutter_app/lib/
 ├── main.dart                      — App entry, Supabase init, GoRouter config
 ├── core/
-│   ├── constants.dart             — kBackendUrl, kWsUrl, kMaxCallDurationSeconds
+│   ├── constants.dart             — kBackendUrl, kWsUrl, kMaxCallDurationSeconds, kAiPartnerName, kAiMaxCallSeconds, kAiDailyLimit, kAiPartnerAvatar
 │   └── theme.dart                 — Complete design system: colors, ThemeData
 ├── models/
 │   ├── match_event.dart           — MatchEvent (channelName, agoraToken, agoraUid, agoraAppId, partnerId, partner), PartnerInfo (name, age?, gender?, avatarUrl?, bio?, occupation?, sector?, country?, state?, motherTongue?)
@@ -607,6 +607,10 @@ flutter_app/lib/
 - Shows active filter chips.
 - Cancel button → sends cancel, navigates home.
 - Warning: "Non-English speakers will be banned".
+- **AI offer card (at 45s remaining):** `_AiOfferCard` slides up with Shivani avatar, "Practice with Shivani (AI Partner)?" + button. Dismissible.
+- **Auto-connect countdown (at 10s remaining):** calls `GET /ai/quota`; if `remaining > 0` → shows `_AutoConnectCard` with live `10→0` countdown. Match arriving during countdown always wins and cancels it.
+- **At 0s:** if auto-connect active → `context.go('/ai-call')`; if cancelled or quota 0 → shows `_TimeoutCard` (which now includes "Talk to Shivani (AI Partner)" primary button + Retry/Cancel).
+- `_autoConnectCancelled` flag: user tapping Cancel on countdown card stops auto-connect for this session.
 
 ### CallScreen
 - Receives `MatchEvent` as `state.extra`.
@@ -620,6 +624,23 @@ flutter_app/lib/
 - **Phone call mute:** `CallAudioManager.onMuteChanged` → `CallService.setMicMuted()` (preserves user's preference when phone call ends).
 - **Auto-disconnect:** at `kMaxCallDurationSeconds = 1800` seconds, `_endCall(reason: 'timer')`.
 - **Rating dialog:** 1–5 stars, skip button, submits to `RatingService` → POST `/call/rate`.
+
+### AiCallScreen
+- Route `/ai-call`. No `state.extra` required.
+- **Visually distinct from CallScreen:** same dark gradient (`kCallBgTop → kCallBgBottom`), but Shivani avatar with kCyan "AI Partner" pill badge directly under "Shivani" name.
+- **Init flow:** mic permission → `AiPartnerService.startSession()` → `AiVoiceController.init()` → speak fixed local greeting (no API): "Hi! I'm Shivani, your AI practice partner. What's your name?" → enter listening loop.
+- **State label** (under avatar): "Listening…" / "Shivani is thinking…" / "Shivani is speaking…" / "Mic muted" / error text.
+- **Avatar pulse:** `AnimationController` glow (kCyan border + shadow) active only when `state == speaking`.
+- **Partial transcript:** live STT text shown in italic text area beneath avatar (hidden when empty).
+- **Mic mute toggle:** pauses STT; resume re-enters listening.
+- **End confirm dialog:** "End Practice?" with Stay / End (kDanger) buttons.
+- **On end:** `stopAll()` → `endSession(transcript, elapsed)` → if feedback returned → `_FeedbackSheet` bottom sheet → `/home`. No star-rating dialog.
+- **Feedback sheet (`_FeedbackSheet`):** DraggableScrollableSheet; score badge (N/10), strengths list (✓), corrections list (❌ you_said → ✅ better + why), Done button.
+- **Daily limit dialog:** shown when `startSession()` throws `AiDailyLimitException` — "Come back tomorrow" → /home.
+- **Retry/end on consecutive failures:** after 2 consecutive null replies from `/ai/chat` shows inline Retry + End buttons.
+- **Auto-end at `kAiMaxCallSeconds` (600s):** alert dialog "Time's Up!" → feedback → /home.
+- **Background handling:** `WidgetsBindingObserver` → `pauseListening()` on pause/inactive, `resumeListening()` on resume.
+- **No Agora, no foreground service, no call_history writes.**
 
 ### ProfileScreen
 - Shows own profile: avatar, name, rating badge (if `ratingCount > 0`), bio, age/gender, location, occupation/sector, mother tongue.
@@ -772,6 +793,26 @@ Uses Supabase client directly (not backend HTTP).
 - `getBlockedUsers()` — 2-step: fetch blocks where `blocker_id=me`, batch-fetch blocked user profiles. Returns `List<Map>` with `blocked_user_profile` merged.
 - `isBlocked(userId)` — checks both directions (me→them OR them→me).
 - `getBlockedUserIds()` — returns `Set<String>` of all user IDs blocked in either direction. Used by `ChatListScreen` to filter out blocked friends.
+
+### AiPartnerService
+HTTP wrapper for `/ai/*` endpoints (same bearer-token pattern as `RoomService`).
+- `startSession()` → POST `/ai/start` → returns `AiSession(sessionId, maxSeconds, partnerName)`. Throws `AiDailyLimitException` on 429, `AiUnavailableException` on 503.
+- `chat(sessionId, userText, history)` → POST `/ai/chat` with 15s timeout → returns reply `String?`. Returns `null` on timeout or any error — caller shows retry state.
+- `endSession(sessionId, transcript, durationSeconds)` → POST `/ai/end` → returns feedback `Map<String, dynamic>?`. Fire-and-forget safe.
+- `getQuota()` → GET `/ai/quota` → returns named record `(used, limit, remaining)`. Never throws.
+
+**Exception classes:** `AiDailyLimitException(limit)`, `AiUnavailableException`.
+
+### AiVoiceController
+Turn-taking engine. Wraps `speech_to_text` (STT) and `flutter_tts` (TTS) — no new dependencies.
+- `ValueNotifier<AiVoiceState> state` — `idle / listening / thinking / speaking / error`
+- `ValueNotifier<String> partialText` — live partial STT transcript for UI display
+- `init()` — initializes STT (`stt.initialize`) + TTS (`setLanguage('en-IN')`, rate 0.5, pitch 1.0, completion handler). Sets `state = error` if STT unavailable.
+- `startListening()` — `listenFor: 30s`, `pauseFor: 2s`, `partialResults: true`, `localeId: 'en_IN'`. On final result: non-empty → `state = thinking`, calls `onUserTurn(text)`; empty → increments `_consecutiveEmpty`; after 2 → `_startSilenceCallback()` (re-listen + 20s timer before `onUserSilent`).
+- `speak(text)` — **stops STT first** (`_stt.stop()` + 150ms delay) then `_tts.speak()`. TTS completion → re-enters `startListening()`. This order is mandatory to prevent echo loops.
+- `pauseListening()` / `resumeListening()` — called on mic mute and app lifecycle events.
+- `stopAll()` — cancels timers, stops STT + TTS, sets `_disposed = true`. Called in `dispose()` and on call end.
+- STT error `error_speech_timeout` / `error_no_match` → transient, auto-restart listening. Other errors → `state = error`.
 
 ### FcmService
 - Singleton (`FcmService.instance`). Initialized in `HomeScreen.initState()` (non-blocking, no await).
@@ -1164,6 +1205,13 @@ Loaded by `flutter_dotenv` at startup. Listed in `pubspec.yaml` under `flutter.a
 String get kBackendUrl => 'https://tark-peer-backend.onrender.com';
 String get kWsUrl => 'wss://tark-peer-backend.onrender.com/ws/match';
 const int kMaxCallDurationSeconds = 1800;
+
+// AI Practice Partner — Shivani
+const String kAiPartnerName = 'Shivani';
+const int kAiMaxCallSeconds = 600;   // 10 min
+const int kAiDailyLimit = 2;
+const String kAiPartnerAvatar =
+    'https://api.dicebear.com/9.x/lorelei-neutral/svg?seed=ShivaniAI&backgroundColor=b6e3f4';
 ```
 
 ---
