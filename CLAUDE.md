@@ -88,6 +88,8 @@ Additional social features: friend requests, direct friend-to-friend calls, real
 - `call_expiry_scanner` — runs every **15 seconds**, atomically claims rooms whose `end_time` has passed using a Lua script, broadcasts `call_ended` to `room:{channelName}`, closes `call_history` with `ended_by='timer'`, cleans Redis state.
 - `message_cleanup` — runs every **3600 seconds (1 hour)**, calls Supabase RPC `delete_expired_messages` to purge expired chat messages.
 - `room_expiry_scanner` — runs every **300 seconds (5 minutes)**, calls `room.expire_old_rooms()` to mark expired group rooms as `'ended'` and broadcast `room_ended`.
+- `peak_hour_notifier` — sleeps until **7:30 PM IST** ("Peak hours start in 30 mins!") and **8:00 PM IST** ("Peak hours are live!") each day, then calls `notification_service.send_peak_hour_blast()` to push to all users with FCM tokens.
+- `streak_warning_notifier` — sleeps until **6:00 PM IST** each day, then calls `notification_service.send_streak_warning_blast()` — finds users who called yesterday but not today (streak at risk) and sends targeted FCM push.
 
 **Startup sequence:**
 1. `redis_client.init_redis()` — connects to Redis
@@ -98,7 +100,7 @@ Additional social features: friend requests, direct friend-to-friend calls, real
 - `GET /health` — returns `{"status": "ok", "service": "tark-peer"}`
 - `GET /stats` — returns `{total_users, online, waiting, active_calls, offline}`. `online = waiting + active_rooms * 2`. Reads from Redis ZSET card counts.
 
-**Routers included:** `auth`, `profile`, `call`, `match`, `room`, `moderation`
+**Routers included:** `auth`, `profile`, `call`, `match`, `room`, `notify`, `moderation`, `ai_partner`
 
 **CORS:** `allow_origins=["*"]`, `allow_methods=["GET", "POST", "PUT", "DELETE"]`
 
@@ -117,6 +119,9 @@ Pydantic `BaseSettings` reads from `.env`:
 | `agora_app_certificate` | Agora App Certificate (backend only) |
 | `redis_url` | Redis connection URL (default: `redis://localhost:6379`) |
 | `jwt_secret` | (present but token verification uses Supabase `get_user`) |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Firebase Admin SDK service account (JSON string). If absent, falls back to `backend/firebase-service-account.json` file for local dev. |
+| `gemini_api_key` | Google Gemini API key. If empty, all `/ai/*` endpoints return 503. |
+| `gemini_model` | Gemini model ID (default: `gemini-2.0-flash`). |
 
 ---
 
@@ -140,6 +145,33 @@ Both verify against Supabase's auth service using the service key client.
 | `DirectCallBody` | `receiver_id` |
 | `CallEndEvent` | `channel_name, reason` |
 | `CallRateEvent` | `channel_name, rated_user_id, stars` |
+
+---
+
+### `backend/routers/notify.py` — `/notify` Router
+
+All endpoints use `Authorization: Bearer <token>` header. All fire FCM push **asynchronously** (`asyncio.create_task`) — responses return `{"status": "ok"}` immediately.
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/notify/friend-request` | POST | Body: `{receiver_id}`. Sends FCM push to receiver: "👋 {name} sent you a friend request". data: `{type: friend_request, sender_id}`. |
+| `/notify/friend-accepted` | POST | Body: `{requester_id}`. Sends FCM push to requester: "👥 {name} accepted your friend request!". data: `{type: friend_accepted, friend_id}`. |
+| `/notify/message` | POST | Body: `{receiver_id, preview}`. Sends FCM push to receiver: "💬 New message from {name}". data: `{type: message, sender_id}`. |
+
+Called by Flutter fire-and-forget HTTP POST (no `await`) from `FriendService` and `MessageService`.
+
+---
+
+### `backend/services/notification_service.py` — FCM Push Layer
+
+Initializes Firebase Admin SDK on import (`firebase_admin.initialize_app`):
+- On Render: reads `FIREBASE_SERVICE_ACCOUNT_JSON` env var (JSON string)
+- Locally: reads `backend/firebase-service-account.json` file
+
+**Functions:**
+- `send_to_user(user_id, title, body?, data?)` → fetches `profiles.fcm_token`, sends single FCM message via thread executor. `android priority: "high"`. Returns `bool`. Never raises.
+- `send_peak_hour_blast(title)` → fetches all tokens from `profiles WHERE fcm_token IS NOT NULL`, sends via `MulticastMessage` in batches of 500. Returns success count.
+- `send_streak_warning_blast()` → computes IST timezone windows for yesterday/today, finds users who called yesterday but not today, fetches their tokens, sends streak warning blast. Returns success count.
 
 ---
 
@@ -252,6 +284,35 @@ All endpoints use `Authorization: Bearer <token>` header.
 
 ---
 
+### `backend/routers/ai_partner.py` — `/ai` Router (Shivani AI Practice Partner)
+
+All endpoints use `Authorization: Bearer <token>`. No Agora, no call_history writes — voice pipeline is fully on-device (STT + TTS) except the LLM call.
+
+**Constants (module-level):**
+- `AI_DAILY_FREE_LIMIT = 2` — sessions per user per day
+- `AI_MAX_CALL_SECONDS = 600` — 10-minute session cap
+- `AI_SESSION_TTL = 900` — 15-minute Redis TTL (hard ceiling)
+- `AI_MAX_TURNS = 30` — max chat turns per session
+- `AI_MAX_HISTORY_PAIRS = 8` — server-side history trimming
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/ai/start` | POST | Checks daily cap (`ai_daily:{uid}:{YYYY-MM-DD IST}` in Redis); if < 2 → INCRs counter (TTL 26h), creates `ai_session:{uuid}` HASH + `ai_turns:{session_id}` counter (TTL 900s). Returns `{session_id, max_seconds: 600, partner_name: "Shivani"}`. Returns 503 if `GEMINI_API_KEY` empty; 429 with `detail: "daily_limit"` if cap reached. |
+| `/ai/quota` | GET | Returns `{used, limit, remaining}` from daily counter without incrementing. Never returns 429. |
+| `/ai/chat` | POST | Body: `{session_id, user_text, history}`. Validates session + owner; enforces 500-char limit on user_text; trims history to last 8 pairs server-side; checks turn counter (max 30). Calls `gemini_service.generate_reply()`. On LLM failure returns `{reply: "Sorry, I missed that...", fallback: true}` — never errors. |
+| `/ai/end` | POST | Body: `{session_id, transcript, duration_seconds}`. Deletes session keys. If transcript ≥ 4 turns: calls `gemini_service.generate_feedback()`. Returns `{feedback: {...} or null}`. Never errors. |
+
+### `backend/services/gemini_service.py` — Gemini LLM Helper
+
+Uses existing `httpx` (async). Base URL: `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}`. 12s timeout.
+
+- `generate_reply(history, user_text, max_output_tokens=120)` — builds Gemini `contents` array, passes Shivani system prompt via `system_instruction`. Returns `str | None`. Returns `None` on any exception, non-200, or empty candidates.
+- `generate_feedback(transcript)` — sends full conversation with strict JSON-only instruction. Returns parsed `dict | None` (keys: `corrections` max 3, `strengths` max 3, `score` 1–10). Strips markdown fences before `json.loads`.
+
+**Shivani system prompt** (module constant `_SHIVANI_SYSTEM_PROMPT`): 1–3 sentence voice replies, under 35 words, no emojis/markdown. Warm AI English coach for Indian learners, Hinglish handling, AI identification on request, topic suggestions, safety refusals.
+
+---
+
 ### `backend/services/redis_client.py` — Redis Layer
 
 **Constants:**
@@ -270,6 +331,9 @@ All endpoints use `Authorization: Bearer <token>` header.
 | `partner:{ch}:{user_id}` | STR | `partner_user_id` | ROOM_TTL |
 | `call_info:{ch}` | HASH | `{user_a, user_b, started_at, end_time}` | ROOM_TTL |
 | `active_rooms` | ZSET | `channel_name → end_time (unix)` | none |
+| `ai_daily:{user_id}:{YYYY-MM-DD}` | STR | session count (IST date) | 26h |
+| `ai_session:{session_id}` | HASH | `{user_id, started_at}` | 900s |
+| `ai_turns:{session_id}` | STR | turn counter | 900s |
 
 **Lua scripts (atomic, EVALSHA):**
 
@@ -336,6 +400,7 @@ pydantic==2.7.1
 pydantic-settings==2.2.1
 python-jose[cryptography]==3.3.0
 httpx==0.27.0
+firebase-admin==6.5.0
 ```
 
 ---
@@ -366,6 +431,8 @@ httpx==0.27.0
 | `speech_to_text ^7.0.0` | Pronunciation challenge game |
 | `flutter_tts ^4.2.0` | Dictation game (text-to-speech) |
 | `confetti ^0.7.0` | Match celebration animation |
+| `firebase_core ^3.6.0` | Firebase initialization |
+| `firebase_messaging ^15.1.3` | FCM push notifications |
 
 ### lib/ Folder Layout
 
@@ -390,11 +457,15 @@ flutter_app/lib/
 │   ├── match_service.dart         — WS + Realtime matchmaking client
 │   ├── call_service.dart          — Agora RTC engine wrapper
 │   ├── call_audio_manager.dart    — Foreground service + phone call audio focus
-│   ├── friend_service.dart        — getFriends, sendRequest, acceptRequest, rejectRequest, getFriendshipStatus, getPendingRequests, getPendingCount
-│   ├── message_service.dart       — fetchMessages, sendMessage, markRead, subscribeToMessages
+│   ├── friend_service.dart        — getFriends, sendRequest (+FCM notify), acceptRequest (+FCM notify), rejectRequest, getFriendshipStatus, getPendingRequests, getPendingCount
+│   ├── message_service.dart       — fetchMessages, sendMessage (+FCM notify), markRead, subscribeToMessages
 │   ├── presence_service.dart      — setOnline/setOffline/setInCall, watchPresence
 │   ├── direct_call_service.dart   — singleton, subscribe/unsubscribe incoming calls, initiateCall
 │   ├── room_service.dart          — createRoom, joinRoom, leaveRoom, getPublicRooms, getRoomMembers
+│   ├── fcm_service.dart           — Singleton; requests FCM permission, saves token to profiles.fcm_token, handles refresh
+│   ├── notification_service.dart  — Singleton; reads/writes notifications Supabase table; getAll, getUnreadCount, markAllRead, deleteById, insertMissedCall
+│   ├── ai_partner_service.dart    — HTTP wrapper for /ai/*; startSession(), chat() 15s timeout, endSession() fire-and-forget, getQuota(); AiDailyLimitException / AiUnavailableException
+│   ├── ai_voice_controller.dart   — Turn-taking engine: STT (speech_to_text) + TTS (flutter_tts); states: idle/listening/thinking/speaking/error; STT stopped before TTS (echo prevention); pauseFor 2s silence; onUserSilent callback; stopAll() cancels everything
 │   ├── rating_service.dart        — POST /call/rate wrapper
 │   ├── report_service.dart        — POST /report wrapper
 │   ├── block_service.dart         — blockUser, unblockUser, getBlockedUsers, isBlocked, getBlockedUserIds
@@ -426,7 +497,8 @@ flutter_app/lib/
 │   ├── matching/
 │   │   └── matching_screen.dart
 │   ├── call/
-│   │   └── call_screen.dart
+│   │   ├── call_screen.dart
+│   │   └── ai_call_screen.dart    — Shivani AI practice call; dark gradient, avatar with kCyan 'AI Partner' badge, feedback sheet
 │   ├── chat/
 │   │   ├── chat_list_screen.dart
 │   │   └── chat_screen.dart
@@ -483,6 +555,7 @@ flutter_app/lib/
 | `/rooms/public` | `PublicRoomsScreen` | List of active public rooms with join button |
 | `/rooms/lobby` | `RoomLobbyScreen` | Live room: member slot grid, speaking glow, mic/speaker controls. **`state.extra` = `RoomInfo` (required)** |
 | `/blocked` | `BlockedUsersScreen` | List of blocked users with Unblock buttons |
+| `/ai-call` | `AiCallScreen` | Shivani AI practice session — no extra required |
 
 ---
 
@@ -700,6 +773,27 @@ Uses Supabase client directly (not backend HTTP).
 - `isBlocked(userId)` — checks both directions (me→them OR them→me).
 - `getBlockedUserIds()` — returns `Set<String>` of all user IDs blocked in either direction. Used by `ChatListScreen` to filter out blocked friends.
 
+### FcmService
+- Singleton (`FcmService.instance`). Initialized in `HomeScreen.initState()` (non-blocking, no await).
+- Requests Android 13+ notification permission (`alert, badge, sound`).
+- Gets FCM token → upserts to `profiles.fcm_token` via Supabase anon client.
+- Listens to `_fcm.onTokenRefresh` to keep token fresh.
+- `FirebaseMessaging.onMessage` (foreground) listener exists but does nothing — in-app events already handled via Realtime.
+- Background handler `_firebaseBackgroundHandler` registered in `main.dart` with `@pragma('vm:entry-point')`.
+
+### NotificationService
+- Singleton (`NotificationService.instance`). Reads/writes `notifications` Supabase table.
+- `getAll()` — last 50 notifications for current user, ordered by `created_at` DESC.
+- `getUnreadCount()` — count of `is_read=false` rows.
+- `markAllRead()` — sets `is_read=true` for all unread rows.
+- `deleteById(id)` — deletes single notification row.
+- `insertMissedCall({callerName, callerId, callerAvatar?})` — inserts `type='missed_call'` row. Called when incoming direct call dialog auto-declines after 30s.
+
+**HomeScreen integration:**
+- Bell icon badge shows `_pendingCount` from `getUnreadCount()` (refreshed on init).
+- Tapping bell → `_showNotifications()` → modal sheet; on open marks all read.
+- Notification sheet shows: missed_call tiles (caller name, "Accept"/"Reject" if friend_request type), swipe-to-dismiss, "Mark all read" button.
+
 ### UpdateService
 - Polls `https://api.github.com/repos/Vijayvsnv/tark-peer/releases/latest` on home screen load (2s delay).
 - Compares semver: `current < latest` → returns `{version, url}`.
@@ -845,6 +939,7 @@ All inferred from services, schemas, and backend code.
 | `rating_count` | int | Count of ratings received |
 | `is_premium` | bool | Default false |
 | `total_calls` | int | |
+| `fcm_token` | text | FCM device token — set by `FcmService` on login/token refresh |
 | `updated_at` | timestamptz | |
 
 **Profile complete check** (`UserProfile.isProfileComplete`): `age != null && gender != null && country != null && state != null`.
@@ -932,6 +1027,20 @@ RLS: SELECT open to all authenticated. UPDATE restricted to host. INSERT/DELETE 
 | `created_at` | timestamptz | |
 
 Constraints: `no_self_report` CHECK (`reporter_id != reported_id`). RLS: INSERT for own row only (no SELECT for users — moderation only).
+
+### `notifications`
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | PK |
+| `user_id` | uuid | FK → profiles — recipient |
+| `type` | text | `missed_call` / `friend_request` / `friend_accepted` / `message` |
+| `title` | text | Notification title |
+| `body` | text | Optional subtitle |
+| `data` | jsonb | Extra payload (e.g. caller_id, sender_id) |
+| `is_read` | bool | Default false |
+| `created_at` | timestamptz | |
+
+Written by: `NotificationService.insertMissedCall()` (client-side, on auto-declined direct call). Read by `HomeScreen` for the notification bell badge and bottom sheet.
 
 ### `blocks`
 | Column | Type | Notes |
@@ -1038,6 +1147,9 @@ AGORA_APP_ID=
 AGORA_APP_CERTIFICATE=
 REDIS_URL=
 JWT_SECRET=
+FIREBASE_SERVICE_ACCOUNT_JSON=   # JSON string of Firebase service account (Render); or put file at backend/firebase-service-account.json (local)
+GEMINI_API_KEY=                  # Google AI Studio key — empty = AI endpoints return 503
+GEMINI_MODEL=gemini-2.0-flash    # optional, this is the default
 ```
 
 ### Flutter (`flutter_app/.env`)
@@ -1180,5 +1292,49 @@ Backend `DELETE /profile/me` uses `_try(label, fn)` helper to ensure all cleanup
 ### 21. Report → Block → End Call Flow (CallScreen)
 After reporting from CallScreen: `_openReportSheet()` calls `ReportService`, on success shows `_showPostReportDialog()` — AlertDialog with 3 choices: Stay / Block / End Call. Block and End Call both internally call `_endCall()` first (block also calls `_blockService.blockUser()`).
 
-### 22. Legal Pages
+### 22. AI Practice Partner — Shivani (Architecture)
+
+**Shivani is always labeled as AI.** Every surface that names her must include an "AI Partner" badge or similar text. This is a hard product requirement.
+
+**Voice pipeline (fully on-device except LLM):**
+`user speaks → speech_to_text (STT) → POST /ai/chat (Gemini) → reply text → flutter_tts (TTS)`
+
+**AiCallScreen flow:**
+1. Request mic permission (same pattern as CallScreen)
+2. POST `/ai/start` — returns session_id; throws AiDailyLimitException (show dialog + go home), AiUnavailableException (snackbar + go home)
+3. AiVoiceController.init() — initializes STT + TTS
+4. Speak fixed greeting locally (no API call): "Hi! I'm Shivani, your AI practice partner. What's your name?"
+5. Turn loop: STT final result → POST /ai/chat → speak reply → STT…
+6. At max 10 min: auto-end dialog → feedback sheet → /home
+7. On end: stopAll() → endSession() → feedback sheet if ≥4 transcript turns → /home
+
+**Daily limit:** 2 sessions per user per IST day. On 429 from `/ai/start`: show dialog "Come back tomorrow" → /home.
+
+**MatchingScreen integration:**
+- 45s remaining: `_AiOfferCard` slide-up (dismiss available)
+- 10s remaining: check GET /ai/quota; if remaining > 0 → `_AutoConnectCard` with live countdown; else skip
+- 0s: if auto-connect active → go to /ai-call; else show `_TimeoutCard` with "Talk to Shivani (AI)" button
+- Match arriving between 80–90s: `_matched = true` cancels auto-connect, match wins
+
+**AI calls NEVER:**
+- Write to `call_history` (FK expects two real profile UUIDs)
+- Use Agora or foreground service
+- Use `CallService` or `CallAudioManager`
+
+### 23. STT Must Stop Before TTS Speaks (Echo Loop Prevention)
+
+In `AiVoiceController.speak()`, STT is explicitly stopped (`_stt.stop()`) with a 150ms delay before `_tts.speak()` is called. This prevents the microphone from picking up Shivani's TTS output and feeding it back as user input — the #1 failure mode in voice AI apps. TTS completion handler re-enters `startListening()` only after audio output finishes.
+
+### 25. FCM Token Storage & Notification Architecture
+FCM token is stored in `profiles.fcm_token` (nullable text). `FcmService.init()` is called in `HomeScreen.initState()` — not at app launch — so the token is saved only after login + home screen load. Token refresh is handled automatically via `_fcm.onTokenRefresh`.
+
+Push notification flow for friend requests/messages:
+1. Client calls backend `/notify/*` (fire-and-forget HTTP, no await)
+2. Backend `notify.py` creates `asyncio.create_task` → returns 200 immediately
+3. `notification_service.send_to_user()` fetches token from Supabase, calls Firebase Admin `messaging.send()` in thread executor
+4. Firebase delivers push to device (system tray if app backgrounded)
+
+The `notifications` Supabase table is for **in-app** notification history (missed calls, etc.) — distinct from FCM push which is for **system tray** notifications when app is backgrounded.
+
+### 26. Legal Pages
 `speakr-app/legal/privacy.html` and `terms.html` are production-ready static HTML pages for GitHub Pages hosting. URLs hardcoded in `constants.dart` as `kPrivacyPolicyUrl` and `kTermsUrl`. Both contain `<!-- TODO: legal entity name -->` placeholder. Contact email is `support@tarkpeer.example` (placeholder).
