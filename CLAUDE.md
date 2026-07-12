@@ -433,6 +433,9 @@ firebase-admin==6.5.0
 | `confetti ^0.7.0` | Match celebration animation |
 | `firebase_core ^3.6.0` | Firebase initialization |
 | `firebase_messaging ^15.1.3` | FCM push notifications |
+| `firebase_crashlytics ^4.1.0` | Crash reporting |
+| `firebase_analytics ^11.3.0` | Event analytics + screen tracking |
+| `in_app_review ^2.0.9` | Google Play in-app review prompt |
 
 ### lib/ Folder Layout
 
@@ -852,7 +855,39 @@ Turn-taking engine. Wraps `speech_to_text` (STT) and `flutter_tts` (TTS) — no 
 - Stars: ≥90% → 3, ≥60% → 2, >0% → 1.
 
 ### OnboardingService
-- `SharedPreferences` key: `onboarding_seen_v1`.
+- `SharedPreferences` key: `onboarding_seen_v2` (bumped from v1 so existing users see the updated 5-slide onboarding once).
+
+### AnalyticsService (`lib/services/analytics_service.dart`)
+- Singleton (`AnalyticsService.instance`) wrapping `FirebaseAnalytics.instance`.
+- Every method is try/catch-wrapped and returns void. All call-sites are fire-and-forget (no await).
+- **No PII in any event parameter.** Event names use snake_case, ≤40 chars.
+
+| Method | Event | Call site |
+|---|---|---|
+| `logSignup()` | `sign_up` | SignupScreen success |
+| `logLogin()` | `login` | LoginScreen success |
+| `logProfileCompleted()` | `profile_completed` | SetupScreen save success |
+| `logMatchStarted()` | `match_started` | MatchingScreen initState |
+| `logMatchFound(waitSeconds)` | `match_found` (wait_seconds) | `_celebrateAndNavigate` |
+| `logMatchTimeout()` | `match_timeout` | `_onTimeout` |
+| `logCallEnded(durationSeconds, reason)` | `call_ended` | CallScreen `_endCall` |
+| `logAiSessionStarted(source)` | `ai_session_started` (source: home_button/offer_card/auto_connect/timeout_card) | AiCallScreen after session starts |
+| `logAiSessionEnded(durationSeconds, turns)` | `ai_session_ended` | AiCallScreen `_endCall` |
+| `logAiFeedbackShown(score)` | `ai_feedback_shown` | Before feedback sheet renders |
+| `logGamePlayed(game, level, score)` | `game_played` | Each game screen after saveResult |
+| `logRoomCreated(size)` | `room_created` | CreateRoomScreen success |
+| `logRoomJoined()` | `room_joined` | JoinRoomScreen success |
+| `logReportSubmitted()` | `report_submitted` | ReportSheet success |
+
+- GoRouter observer: `FirebaseAnalyticsObserver` registered in `_router` in `main.dart` for automatic `screen_view` events.
+
+### ReviewService (`lib/services/review_service.dart`)
+- Singleton (`ReviewService.instance`), SharedPrefs-backed.
+- **Static flag** `ReviewService.pendingCheck` — set to `true` by CallScreen and AiCallScreen before navigating home; read and cleared by HomeScreen post-frame callback.
+- `recordSuccessfulCall(durationSeconds)` — increments `successful_calls_count` only if `durationSeconds >= 120`. Fire-and-forget.
+- `maybeAsk(context)` — shows review prompt when: count ≥ 3 AND `review_prompt_shown_v1` flag false AND `InAppReview.isAvailable()` true. Sets shown flag after prompt. Entire method try/catch-wrapped.
+- **Wiring:** Called from HomeScreen `initState` post-frame callback — NEVER during call-end or navigation sequence.
+- **Note:** On devices where app was not installed from Play Store, `requestReview()` silently no-ops — this is expected.
 
 ### HomeHintsService
 - Singleton. 3 flags in SharedPrefs: `hint_tark_here_seen_v1`, `hint_learn_tab_seen_v1`, `hint_games_tab_seen_v1`.
@@ -1383,6 +1418,26 @@ Push notification flow for friend requests/messages:
 4. Firebase delivers push to device (system tray if app backgrounded)
 
 The `notifications` Supabase table is for **in-app** notification history (missed calls, etc.) — distinct from FCM push which is for **system tray** notifications when app is backgrounded.
+
+### 27. Crashlytics Collection Disabled in Debug
+`FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(!kDebugMode)` is called in `main()`. Debug-run crashes do NOT appear in the Firebase Console. To test a crash in debug mode, temporarily flip the flag to `true`, use the long-press version text trigger on ProfileScreen, then revert. In production/profile builds, collection is always on.
+
+### 28. Analytics Observer for Screen Views
+`FirebaseAnalyticsObserver` is registered in the GoRouter `observers` list in `main.dart`. This automatically logs `screen_view` events for every route navigation. No manual screen tracking is needed.
+
+### 29. In-App Review Prompt Rules
+- Shown after **3 successful calls of ≥2 minutes** (human OR AI).
+- Shown **once ever** (`review_prompt_shown_v1` SharedPrefs flag).
+- Triggered from **HomeScreen** post-frame callback via `ReviewService.pendingCheck` static flag.
+- **Never** shown during call-end flow or on top of feedback/rating dialogs.
+- On devices where the app was not installed from Google Play, `InAppReview.requestReview()` silently no-ops — this is expected behavior, not a bug.
+
+### 30. No PII in Analytics or Crashlytics
+- Crashlytics user identifier is the **Supabase UUID only** — never email, name, or phone.
+- No analytics event parameters contain email, name, phone, message content, or voice transcripts.
+
+### 31. Privacy Policy — Google Gemini
+`speakr-app/legal/privacy.html` section 5 (Third-Party Service Processors) now lists **Google Gemini API**: only text transcripts (not audio) are sent during AI sessions; conversation text is not linked to the user's identity.
 
 ### 26. Legal Pages
 `speakr-app/legal/privacy.html` and `terms.html` are production-ready static HTML pages for GitHub Pages hosting. URLs hardcoded in `constants.dart` as `kPrivacyPolicyUrl` and `kTermsUrl`. Both contain `<!-- TODO: legal entity name -->` placeholder. Contact email is `support@tarkpeer.example` (placeholder).
