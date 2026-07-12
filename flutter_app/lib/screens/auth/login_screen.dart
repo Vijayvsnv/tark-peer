@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
+import '../../services/analytics_service.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/custom_button.dart';
 
@@ -26,6 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await _auth.signIn(email: _emailCtrl.text.trim(), password: _passCtrl.text);
       if (!mounted) return;
+      AnalyticsService.instance.logLogin();
       context.go('/home');
     } catch (e) {
       if (!mounted) return;

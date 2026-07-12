@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
+import '../../services/analytics_service.dart';
 import '../../services/game_progress_service.dart';
 
 // ── Data ─────────────────────────────────────────────────────────────────────
@@ -123,6 +124,7 @@ class _FillBlanksScreenState extends State<FillBlanksScreen>
   Future<void> _next() async {
     if (_qIndex + 1 >= _questions.length) {
       await GameProgressService.instance.saveResult('fill', widget.level, _score, _questions.length);
+      AnalyticsService.instance.logGamePlayed('fill', widget.level, _score);
       setState(() => _done = true);
       return;
     }

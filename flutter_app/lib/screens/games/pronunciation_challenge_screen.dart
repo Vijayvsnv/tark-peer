@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import '../../core/theme.dart';
+import '../../services/analytics_service.dart';
 import '../../services/game_progress_service.dart';
 
 // ── Word pools ────────────────────────────────────────────────────────────────
@@ -154,6 +155,7 @@ class _PronunciationChallengeScreenState
   Future<void> _next() async {
     if (_index + 1 >= _total) {
       await GameProgressService.instance.saveResult('pronun', widget.level, _score, _total);
+      AnalyticsService.instance.logGamePlayed('pronun', widget.level, _score);
       setState(() => _done = true);
       return;
     }

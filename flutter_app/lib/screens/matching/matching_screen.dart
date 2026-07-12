@@ -10,6 +10,7 @@ import '../../core/theme.dart';
 import '../../models/match_event.dart';
 import '../../models/match_filter.dart';
 import '../../services/ai_partner_service.dart';
+import '../../services/analytics_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/match_service.dart';
 import '../../widgets/user_avatar.dart';
@@ -68,6 +69,7 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
     );
     _startTimer();
     _connect();
+    AnalyticsService.instance.logMatchStarted();
   }
 
   void _startTimer() {
@@ -188,6 +190,7 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
     if (_matched) return;
     _matched = true;
     _timer?.cancel();
+    AnalyticsService.instance.logMatchFound(90 - _remaining);
     HapticFeedback.heavyImpact();
     setState(() {
       _matchedEvent = event;
@@ -218,14 +221,13 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
     if (_matched) return;
     if (_cancelling) return;
 
+    AnalyticsService.instance.logMatchTimeout();
     _matchService.sendCancel();
     _matchService.disconnect();
 
     if (_autoConnectActive && !_autoConnectCancelled && _aiQuotaRemaining > 0) {
-      // Auto-connect to Shivani
-      context.go('/ai-call');
+      context.go('/ai-call', extra: 'auto_connect');
     } else {
-      // Show plain timeout card
       setState(() {
         _cancelling = false;
         _timedOut = true;
@@ -233,13 +235,13 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
     }
   }
 
-  Future<void> _goToAiCall() async {
+  Future<void> _goToAiCall(String source) async {
     if (_cancelling) return;
     setState(() => _cancelling = true);
     _matchService.sendCancel();
     _matchService.disconnect();
     await Future.delayed(const Duration(milliseconds: 150));
-    if (mounted) context.go('/ai-call');
+    if (mounted) context.go('/ai-call', extra: source);
   }
 
   Future<void> _retry() async {
@@ -412,7 +414,7 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
               left: 0,
               right: 0,
               child: _AiOfferCard(
-                onTalkToShivani: _goToAiCall,
+                onTalkToShivani: () => _goToAiCall('offer_card'),
                 onDismiss: () => setState(() => _aiOfferVisible = false),
               ),
             ),
@@ -439,7 +441,7 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
             retrying: _retrying,
             onRetry: _retry,
             onCancel: () => context.go('/home'),
-            onTalkToShivani: _goToAiCall,
+            onTalkToShivani: () => _goToAiCall('timeout_card'),
           ),
         ],
       ),

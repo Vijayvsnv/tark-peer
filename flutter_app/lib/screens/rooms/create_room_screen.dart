@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../models/room_models.dart';
+import '../../services/analytics_service.dart';
 import '../../services/room_service.dart';
 import '../../widgets/custom_button.dart';
 
@@ -38,6 +39,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
         type: _type,
         maxMembers: _maxMembers,
       );
+      AnalyticsService.instance.logRoomCreated(_maxMembers);
       if (mounted) context.pushReplacement('/rooms/lobby', extra: room);
     } catch (e) {
       if (mounted) {

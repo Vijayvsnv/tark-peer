@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/theme.dart';
+import '../services/analytics_service.dart';
 import '../services/report_service.dart';
 import 'custom_button.dart';
 
@@ -52,6 +53,7 @@ class _ReportSheetState extends State<ReportSheet> {
     if (!mounted) return;
     setState(() => _loading = false);
     if (success) {
+      AnalyticsService.instance.logReportSubmitted();
       Navigator.of(context).pop(true);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(

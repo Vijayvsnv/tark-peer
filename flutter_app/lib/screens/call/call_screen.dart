@@ -10,12 +10,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../models/match_event.dart';
+import '../../services/analytics_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/block_service.dart';
 import '../../services/call_audio_manager.dart';
 import '../../services/call_service.dart';
 import '../../services/friend_service.dart';
 import '../../services/rating_service.dart';
+import '../../services/review_service.dart';
 import '../../widgets/report_sheet.dart';
 import '../../widgets/user_avatar.dart';
 
@@ -272,6 +274,10 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
         );
       } catch (_) {}
     }
+
+    AnalyticsService.instance.logCallEnded(_elapsed, reason);
+    ReviewService.instance.recordSuccessfulCall(_elapsed);
+    ReviewService.pendingCheck = true;
 
     await _callService.leaveCall();
     if (!mounted) return;

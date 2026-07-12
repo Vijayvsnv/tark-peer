@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants.dart';
 import '../../core/theme.dart';
+import '../../services/analytics_service.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/custom_button.dart';
 
@@ -44,6 +45,7 @@ class _SignupScreenState extends State<SignupScreen> {
         name: _nameCtrl.text.trim(),
       );
       if (!mounted) return;
+      AnalyticsService.instance.logSignup();
       context.go('/setup');
     } catch (e) {
       if (!mounted) return;

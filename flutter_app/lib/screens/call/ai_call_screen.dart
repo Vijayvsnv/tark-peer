@@ -8,10 +8,13 @@ import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../services/ai_partner_service.dart';
 import '../../services/ai_voice_controller.dart';
+import '../../services/analytics_service.dart';
+import '../../services/review_service.dart';
 import '../../widgets/user_avatar.dart';
 
 class AiCallScreen extends StatefulWidget {
-  const AiCallScreen({super.key});
+  final String? source;
+  const AiCallScreen({super.key, this.source});
 
   @override
   State<AiCallScreen> createState() => _AiCallScreenState();
@@ -99,6 +102,7 @@ class _AiCallScreenState extends State<AiCallScreen>
 
     _sessionId = session.sessionId;
     _maxSeconds = session.maxSeconds;
+    AnalyticsService.instance.logAiSessionStarted(widget.source ?? 'home_button');
 
     // 3. Init voice controller
     _voice = AiVoiceController(
@@ -231,6 +235,10 @@ class _AiCallScreenState extends State<AiCallScreen>
     _timer?.cancel();
     await _voice?.stopAll();
 
+    AnalyticsService.instance.logAiSessionEnded(_elapsed, _transcript.length);
+    ReviewService.instance.recordSuccessfulCall(_elapsed);
+    ReviewService.pendingCheck = true;
+
     if (!mounted) return;
 
     if (autoEnd) {
@@ -270,6 +278,8 @@ class _AiCallScreenState extends State<AiCallScreen>
     if (!mounted) return;
 
     if (feedback != null) {
+      final score = (feedback['score'] as num?)?.toInt() ?? 0;
+      AnalyticsService.instance.logAiFeedbackShown(score);
       await _showFeedbackSheet(feedback);
     }
 

@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants.dart';
 import '../../core/theme.dart';
@@ -22,6 +25,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _auth = AuthService();
   UserProfile? _profile;
   bool _loading = true;
+  String _appVersion = '';
 
   @override
   void initState() {
@@ -30,11 +34,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _load() async {
-    try {
-      final p = await _profileService.getMyProfile();
-      if (mounted) setState(() { _profile = p; _loading = false; });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+    final results = await Future.wait([
+      _profileService.getMyProfile(),
+      PackageInfo.fromPlatform(),
+    ]);
+    if (mounted) {
+      setState(() {
+        _profile = results[0] as UserProfile?;
+        _appVersion = 'v${(results[1] as PackageInfo).version}';
+        _loading = false;
+      });
     }
   }
 
@@ -142,6 +151,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     danger: true,
                   ),
                   const SizedBox(height: 20),
+                  GestureDetector(
+                    onLongPress: kDebugMode
+                        ? () => FirebaseCrashlytics.instance.crash()
+                        : null,
+                    child: Text(
+                      _appVersion,
+                      style: const TextStyle(color: kTextMuted, fontSize: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),

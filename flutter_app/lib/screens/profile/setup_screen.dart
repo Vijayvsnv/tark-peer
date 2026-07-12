@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../data/locations.dart';
+import '../../services/analytics_service.dart';
 import '../../services/profile_service.dart';
 import '../../widgets/avatar_picker_sheet.dart';
 import '../../widgets/custom_button.dart';
@@ -96,6 +97,7 @@ class _SetupScreenState extends State<SetupScreen> {
         avatarUrl: _avatarUrl,
       );
       if (!mounted) return;
+      AnalyticsService.instance.logProfileCompleted();
       context.go('/home');
     } catch (e) {
       if (!mounted) return;

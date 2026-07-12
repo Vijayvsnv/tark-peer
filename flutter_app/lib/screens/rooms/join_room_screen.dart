@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
+import '../../services/analytics_service.dart';
 import '../../services/room_service.dart';
 import '../../widgets/custom_button.dart';
 
@@ -29,6 +30,7 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
     setState(() => _loading = true);
     try {
       final room = await _roomService.joinRoom(_codeCtrl.text.trim().toUpperCase());
+      AnalyticsService.instance.logRoomJoined();
       if (mounted) context.pushReplacement('/rooms/lobby', extra: room);
     } catch (e) {
       if (mounted) {

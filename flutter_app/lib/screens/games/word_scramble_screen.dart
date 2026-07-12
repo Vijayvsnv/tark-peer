@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
+import '../../services/analytics_service.dart';
 import '../../services/game_progress_service.dart';
 
 // ── Word pools ────────────────────────────────────────────────────────────────
@@ -120,6 +121,7 @@ class _WordScrambleScreenState extends State<WordScrambleScreen> {
   Future<void> _next() async {
     if (_wIndex + 1 >= _total) {
       await GameProgressService.instance.saveResult('scramble', widget.level, _score, _total);
+      AnalyticsService.instance.logGamePlayed('scramble', widget.level, _score);
       setState(() => _done = true);
       return;
     }

@@ -41,6 +41,13 @@ const List<_Slide> _slides = [
     color: Color(0xFF8B5CF6),
   ),
   _Slide(
+    emoji: '🤖',
+    title: 'Meet Shivani — Your AI Partner',
+    subtitle:
+        'No partner online? Practice anytime with Shivani, our friendly AI practice partner. Always available, never judges.',
+    color: Color(0xFF39C6F4),
+  ),
+  _Slide(
     emoji: '📈',
     title: 'Track your journey',
     subtitle: 'Streaks, stats and milestones to keep you motivated',

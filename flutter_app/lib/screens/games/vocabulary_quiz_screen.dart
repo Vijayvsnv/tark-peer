@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
+import '../../services/analytics_service.dart';
 import '../../services/game_progress_service.dart';
 
 // ── Data ─────────────────────────────────────────────────────────────────────
@@ -114,6 +115,7 @@ class _VocabularyQuizScreenState extends State<VocabularyQuizScreen>
     if (_qIndex + 1 >= _questions.length) {
       // Save progress
       GameProgressService.instance.saveResult('vocab', widget.level, _score, _questions.length);
+      AnalyticsService.instance.logGamePlayed('vocab', widget.level, _score);
       setState(() => _done = true);
       return;
     }

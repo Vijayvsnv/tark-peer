@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -16,6 +17,7 @@ import '../../services/profile_service.dart';
 import '../../services/presence_service.dart';
 import '../../services/fcm_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/review_service.dart';
 import '../../services/update_service.dart';
 import '../../widgets/filter_bottom_sheet.dart';
 import '../../widgets/user_avatar.dart';
@@ -61,6 +63,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _loadAll();
     _statsTimer = Timer.periodic(const Duration(seconds: 15), (_) => _loadWaiting());
     Future.delayed(const Duration(seconds: 2), _checkUpdate);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (ReviewService.pendingCheck && mounted) {
+        ReviewService.pendingCheck = false;
+        ReviewService.instance.maybeAsk(context);
+      }
+    });
     FcmService.instance.init();
     _presenceService.setOnline();
     DirectCallService.instance.subscribe();
@@ -91,6 +99,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     try {
       final p = await _profileService.getMyProfile();
       if (mounted) setState(() => _profile = p);
+      if (p != null) {
+        try {
+          await FirebaseCrashlytics.instance.setUserIdentifier(p.id);
+        } catch (_) {}
+      }
     } catch (_) {}
   }
 
@@ -387,7 +400,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
                 const SizedBox(height: 14),
                 OutlinedButton.icon(
-                  onPressed: () => context.push('/ai-call'),
+                  onPressed: () => context.push('/ai-call', extra: 'home_button'),
                   icon: const Text('🤖', style: TextStyle(fontSize: 15)),
                   label: const Text(
                     'Practice with Shivani (AI Partner)',
