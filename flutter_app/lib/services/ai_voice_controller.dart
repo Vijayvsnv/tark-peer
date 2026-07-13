@@ -34,7 +34,7 @@ class AiVoiceController {
   bool _disposed = false;
   int _consecutiveEmpty = 0;
   Timer? _silenceTimer;
-  static const _silenceThreshold = 2; // empty results before silent callback
+  static const _silenceThreshold = 4; // empty results before silent callback
 
   Future<void> init() async {
     // Init STT
@@ -76,7 +76,7 @@ class AiVoiceController {
       listenFor: const Duration(seconds: 30),
       pauseFor: const Duration(seconds: 2),
       partialResults: true,
-      localeId: 'en_IN',
+      localeId: 'en_US',
       onResult: _onSttResult,
     );
   }

@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 _IST = timezone(timedelta(hours=5, minutes=30))
 
-AI_DAILY_FREE_LIMIT = 2
+AI_DAILY_FREE_LIMIT = 5
 AI_MAX_CALL_SECONDS = 600   # 10 min
 AI_SESSION_TTL = 900        # 15 min hard ceiling
 AI_MAX_TURNS = 30

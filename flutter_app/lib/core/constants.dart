@@ -9,7 +9,7 @@ const String kTermsUrl = 'https://vijayvsnv.github.io/tark-peer/legal/terms.html
 // AI Practice Partner — Shivani
 const String kAiPartnerName = 'Shivani';
 const int kAiMaxCallSeconds = 600;  // 10 min
-const int kAiDailyLimit = 2;
+const int kAiDailyLimit = 5;
 // DiceBear lorelei-neutral style — visually distinct from user preset avatars
 const String kAiPartnerAvatar =
     'https://api.dicebear.com/9.x/lorelei-neutral/svg?seed=ShivaniAI&backgroundColor=b6e3f4';
