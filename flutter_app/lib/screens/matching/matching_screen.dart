@@ -401,7 +401,6 @@ class _MatchingScreenState extends State<MatchingScreen> with TickerProviderStat
                 ),
               ),
             ],
-                ),
               ),
             ),
           ),

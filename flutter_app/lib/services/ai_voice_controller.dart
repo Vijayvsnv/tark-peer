@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
 enum AiVoiceState { idle, listening, thinking, speaking, error }
@@ -80,7 +81,7 @@ class AiVoiceController {
     );
   }
 
-  void _onSttResult(stt.SpeechRecognitionResult result) {
+  void _onSttResult(SpeechRecognitionResult result) {
     if (_disposed) return;
     partialText.value = result.recognizedWords;
     if (!result.finalResult) return;
