@@ -4,13 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'package:flutter_svg/flutter_svg.dart';
+
 import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../services/ai_partner_service.dart';
 import '../../services/ai_voice_controller.dart';
 import '../../services/analytics_service.dart';
 import '../../services/review_service.dart';
-import '../../widgets/user_avatar.dart';
 
 class AiCallScreen extends StatefulWidget {
   final String? source;
@@ -447,10 +448,9 @@ class _AiCallScreenState extends State<AiCallScreen>
                                   : [],
                             ),
                             child: ClipOval(
-                              child: UserAvatar(
-                                imageUrl: kAiPartnerAvatar,
-                                name: kAiPartnerName,
-                                radius: 60,
+                              child: SvgPicture.asset(
+                                'assets/images/shivani_avatar.svg',
+                                fit: BoxFit.cover,
                               ),
                             ),
                           ),

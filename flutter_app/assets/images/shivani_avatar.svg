@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a3550"/>
+      <stop offset="100%" stop-color="#0d2137"/>
+    </linearGradient>
+    <clipPath id="clip">
+      <circle cx="100" cy="100" r="100"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <circle cx="100" cy="100" r="100" fill="url(#bgGrad)"/>
+
+  <!-- Shoulders -->
+  <path d="M10 200 Q20 148 60 140 L100 136 L140 140 Q180 148 190 200 Z" fill="#2d5e8e" clip-path="url(#clip)"/>
+
+  <!-- Neck -->
+  <rect x="85" y="134" width="30" height="22" rx="6" fill="#d4956a"/>
+
+  <!-- Head -->
+  <ellipse cx="100" cy="99" rx="43" ry="50" fill="#e8b08a"/>
+
+  <!-- Hair top -->
+  <ellipse cx="100" cy="65" rx="46" ry="32" fill="#1c0f0a"/>
+  <!-- Hair left side -->
+  <path d="M57 76 Q50 96 54 134 Q60 142 68 138 Q60 114 62 88 Z" fill="#1c0f0a"/>
+  <!-- Hair right side -->
+  <path d="M143 76 Q150 96 146 134 Q140 142 132 138 Q140 114 138 88 Z" fill="#1c0f0a"/>
+  <!-- Hair highlight streak -->
+  <path d="M72 64 Q86 56 100 55 Q114 56 128 64" stroke="#3a1a12" stroke-width="2.5" fill="none"/>
+
+  <!-- Ears (mostly hidden) -->
+  <ellipse cx="57" cy="103" rx="7" ry="9" fill="#d4956a"/>
+  <ellipse cx="143" cy="103" rx="7" ry="9" fill="#d4956a"/>
+
+  <!-- Eye whites -->
+  <ellipse cx="84" cy="100" rx="8.5" ry="9.5" fill="white"/>
+  <ellipse cx="116" cy="100" rx="8.5" ry="9.5" fill="white"/>
+
+  <!-- Iris -->
+  <circle cx="84.5" cy="101" r="6" fill="#3d2010"/>
+  <circle cx="116.5" cy="101" r="6" fill="#3d2010"/>
+
+  <!-- Pupil -->
+  <circle cx="84.5" cy="101" r="3.2" fill="#080808"/>
+  <circle cx="116.5" cy="101" r="3.2" fill="#080808"/>
+
+  <!-- Eye shine -->
+  <circle cx="86.5" cy="98.5" r="2" fill="white"/>
+  <circle cx="118.5" cy="98.5" r="2" fill="white"/>
+
+  <!-- Eyelid top line -->
+  <path d="M75.5 93 Q84 88 92.5 92" stroke="#1c0f0a" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M107.5 93 Q116 88 124.5 92" stroke="#1c0f0a" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Eyebrows (slightly arched) -->
+  <path d="M75 89.5 Q84 84 93 88.5" stroke="#1c0f0a" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+  <path d="M107 89.5 Q116 84 125 88.5" stroke="#1c0f0a" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+
+  <!-- Nose -->
+  <path d="M97 109 Q94 121 96 124 Q100 127 104 124 Q106 121 103 109" fill="none" stroke="#c4906a" stroke-width="1.8" stroke-linecap="round"/>
+  <circle cx="96" cy="123" r="2.5" fill="#c4906a" opacity="0.55"/>
+  <circle cx="104" cy="123" r="2.5" fill="#c4906a" opacity="0.55"/>
+
+  <!-- Upper lip -->
+  <path d="M88 131 Q94 126 100 128 Q106 126 112 131 Q106 136 100 135 Q94 136 88 131 Z" fill="#c47060"/>
+  <!-- Lower lip -->
+  <path d="M88 131 Q100 142 112 131 Q106 136 100 135 Q94 136 88 131 Z" fill="#d48070"/>
+  <!-- Lip crease -->
+  <path d="M88 131 Q100 133.5 112 131" stroke="#a84040" stroke-width="1" fill="none"/>
+
+  <!-- Cheek blush -->
+  <ellipse cx="71" cy="116" rx="13" ry="7" fill="#e89080" opacity="0.28"/>
+  <ellipse cx="129" cy="116" rx="13" ry="7" fill="#e89080" opacity="0.28"/>
+
+  <!-- ══════════ HEADPHONES ══════════ -->
+  <!-- Headband -->
+  <path d="M48 103 Q46 44 100 40 Q154 44 152 103" stroke="#29b0e0" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <!-- Headband top cushion highlight -->
+  <path d="M52 103 Q50 50 100 46 Q150 50 148 103" stroke="#5ad8f8" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.45"/>
+
+  <!-- Left ear cup shell -->
+  <rect x="34" y="91" width="26" height="34" rx="11" fill="#29b0e0"/>
+  <!-- Left cup inner foam -->
+  <rect x="39" y="96" width="16" height="24" rx="7" fill="#1a6a8a"/>
+  <!-- Left cup LED dot -->
+  <circle cx="47" cy="100" r="2.5" fill="#5ad8f8" opacity="0.8"/>
+  <!-- Left cup speaker lines -->
+  <line x1="40" y1="106" x2="54" y2="106" stroke="#2590b0" stroke-width="1.2" opacity="0.6"/>
+  <line x1="40" y1="110" x2="54" y2="110" stroke="#2590b0" stroke-width="1.2" opacity="0.6"/>
+  <line x1="40" y1="114" x2="54" y2="114" stroke="#2590b0" stroke-width="1.2" opacity="0.6"/>
+
+  <!-- Right ear cup shell -->
+  <rect x="140" y="91" width="26" height="34" rx="11" fill="#29b0e0"/>
+  <!-- Right cup inner foam -->
+  <rect x="145" y="96" width="16" height="24" rx="7" fill="#1a6a8a"/>
+  <!-- Right cup LED dot -->
+  <circle cx="153" cy="100" r="2.5" fill="#5ad8f8" opacity="0.8"/>
+  <!-- Right cup speaker lines -->
+  <line x1="146" y1="106" x2="160" y2="106" stroke="#2590b0" stroke-width="1.2" opacity="0.6"/>
+  <line x1="146" y1="110" x2="160" y2="110" stroke="#2590b0" stroke-width="1.2" opacity="0.6"/>
+  <line x1="146" y1="114" x2="160" y2="114" stroke="#2590b0" stroke-width="1.2" opacity="0.6"/>
+
+  <!-- ══════════ MIC BOOM ══════════ -->
+  <!-- Boom arm from left cup -->
+  <path d="M47 120 Q46 150 80 140" stroke="#29b0e0" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <!-- Mic capsule body -->
+  <rect x="75" y="134" width="14" height="10" rx="4" fill="#29b0e0"/>
+  <!-- Mic grill -->
+  <rect x="77" y="136" width="10" height="6" rx="2" fill="#1a6a8a"/>
+  <line x1="78" y1="137.5" x2="86" y2="137.5" stroke="#2590b0" stroke-width="1"/>
+  <line x1="78" y1="139.5" x2="86" y2="139.5" stroke="#2590b0" stroke-width="1"/>
+  <!-- Active indicator (green dot = mic on) -->
+  <circle cx="82" cy="132" r="3" fill="#00e676"/>
+  <circle cx="82" cy="132" r="1.5" fill="#00ff88"/>
+</svg>

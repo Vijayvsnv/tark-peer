@@ -10,10 +10,11 @@ import '../../core/theme.dart';
 import '../../models/match_event.dart';
 import '../../models/match_filter.dart';
 import '../../services/ai_partner_service.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+
 import '../../services/analytics_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/match_service.dart';
-import '../../widgets/user_avatar.dart';
 
 class MatchingScreen extends StatefulWidget {
   final MatchFilter? filter;
@@ -472,7 +473,10 @@ class _AiOfferCard extends StatelessWidget {
       child: Row(
         children: [
           ClipOval(
-            child: UserAvatar(imageUrl: kAiPartnerAvatar, name: kAiPartnerName, radius: 22),
+            child: SizedBox(
+              width: 44, height: 44,
+              child: SvgPicture.asset('assets/images/shivani_avatar.svg', fit: BoxFit.cover),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -542,7 +546,10 @@ class _AutoConnectCard extends StatelessWidget {
       child: Row(
         children: [
           ClipOval(
-            child: UserAvatar(imageUrl: kAiPartnerAvatar, name: kAiPartnerName, radius: 22),
+            child: SizedBox(
+              width: 44, height: 44,
+              child: SvgPicture.asset('assets/images/shivani_avatar.svg', fit: BoxFit.cover),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(

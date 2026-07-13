@@ -21,6 +21,7 @@ import '../../services/review_service.dart';
 import '../../services/update_service.dart';
 import '../../widgets/filter_bottom_sheet.dart';
 import '../../widgets/user_avatar.dart';
+import 'ai_tab.dart';
 import 'games_tab.dart';
 import 'learn_tab.dart';
 import 'progress_tab.dart';
@@ -307,6 +308,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         children: [
           const LearnTab(),
           _buildPracticeTab(),
+          const AiTab(),
           const GamesTab(),
           const ProgressTab(),
         ],
@@ -323,7 +325,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             onTap: (i) {
               setState(() => _currentTab = i);
               if (i == 0) _hints.markLearnSeen();
-              if (i == 2) _hints.markGamesSeen();
+              if (i == 3) _hints.markGamesSeen();
             },
             backgroundColor: kBackground,
             selectedItemColor: kPrimary,
@@ -337,6 +339,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 label: 'Learn',
               ),
               const BottomNavigationBarItem(icon: Icon(Icons.mic_outlined), label: 'Practice'),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.smart_toy_rounded),
+                label: 'AI Talk',
+              ),
               BottomNavigationBarItem(
                 icon: _PulseTabIcon(icon: Icons.games_rounded, showPulse: !_hints.gamesSeen.value),
                 label: 'Games',
