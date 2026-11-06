@@ -289,7 +289,7 @@ All endpoints use `Authorization: Bearer <token>` header.
 All endpoints use `Authorization: Bearer <token>`. No Agora, no call_history writes — voice pipeline is fully on-device (STT + TTS) except the LLM call.
 
 **Constants (module-level):**
-- `AI_DAILY_FREE_LIMIT = 2` — sessions per user per day
+- `AI_DAILY_FREE_LIMIT = 5` — sessions per user per day
 - `AI_MAX_CALL_SECONDS = 600` — 10-minute session cap
 - `AI_SESSION_TTL = 900` — 15-minute Redis TTL (hard ceiling)
 - `AI_MAX_TURNS = 30` — max chat turns per session
@@ -1244,7 +1244,7 @@ const int kMaxCallDurationSeconds = 1800;
 // AI Practice Partner — Shivani
 const String kAiPartnerName = 'Shivani';
 const int kAiMaxCallSeconds = 600;   // 10 min
-const int kAiDailyLimit = 2;
+const int kAiDailyLimit = 5;
 const String kAiPartnerAvatar =
     'https://api.dicebear.com/9.x/lorelei-neutral/svg?seed=ShivaniAI&backgroundColor=b6e3f4';
 ```
