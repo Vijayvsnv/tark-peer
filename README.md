@@ -213,3 +213,4 @@ WS_URL=ws://10.0.2.2:8000/ws/match
 - `.env` files `.gitignore` mein hain — commit mat karna
 - Redis mein saari user state hai — server pe kuch nahi
 - Email confirmation Supabase dashboard se disable karo (Authentication → Providers → Email)
+- Backend health check: `GET /health` returns `{"status": "ok"}` — useful for uptime monitors
