@@ -1391,7 +1391,7 @@ After reporting from CallScreen: `_openReportSheet()` calls `ReportService`, on 
 6. At max 10 min: auto-end dialog → feedback sheet → /home
 7. On end: stopAll() → endSession() → feedback sheet if ≥4 transcript turns → /home
 
-**Daily limit:** 2 sessions per user per IST day. On 429 from `/ai/start`: show dialog "Come back tomorrow" → /home.
+**Daily limit:** 5 sessions per user per IST day. On 429 from `/ai/start`: show dialog "Come back tomorrow" → /home.
 
 **MatchingScreen integration:**
 - 45s remaining: `_AiOfferCard` slide-up (dismiss available)
