@@ -297,7 +297,7 @@ All endpoints use `Authorization: Bearer <token>`. No Agora, no call_history wri
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/ai/start` | POST | Checks daily cap (`ai_daily:{uid}:{YYYY-MM-DD IST}` in Redis); if < 2 → INCRs counter (TTL 26h), creates `ai_session:{uuid}` HASH + `ai_turns:{session_id}` counter (TTL 900s). Returns `{session_id, max_seconds: 600, partner_name: "Shivani"}`. Returns 503 if `GEMINI_API_KEY` empty; 429 with `detail: "daily_limit"` if cap reached. |
+| `/ai/start` | POST | Checks daily cap (`ai_daily:{uid}:{YYYY-MM-DD IST}` in Redis); if < `AI_DAILY_FREE_LIMIT` (5) → INCRs counter (TTL 26h), creates `ai_session:{uuid}` HASH + `ai_turns:{session_id}` counter (TTL 900s). Returns `{session_id, max_seconds: 600, partner_name: "Shivani"}`. Returns 503 if `GEMINI_API_KEY` empty; 429 with `detail: "daily_limit"` if cap reached. |
 | `/ai/quota` | GET | Returns `{used, limit, remaining}` from daily counter without incrementing. Never returns 429. |
 | `/ai/chat` | POST | Body: `{session_id, user_text, history}`. Validates session + owner; enforces 500-char limit on user_text; trims history to last 8 pairs server-side; checks turn counter (max 30). Calls `gemini_service.generate_reply()`. On LLM failure returns `{reply: "Sorry, I missed that...", fallback: true}` — never errors. |
 | `/ai/end` | POST | Body: `{session_id, transcript, duration_seconds}`. Deletes session keys. If transcript ≥ 4 turns: calls `gemini_service.generate_feedback()`. Returns `{feedback: {...} or null}`. Never errors. |
@@ -1391,7 +1391,7 @@ After reporting from CallScreen: `_openReportSheet()` calls `ReportService`, on 
 6. At max 10 min: auto-end dialog → feedback sheet → /home
 7. On end: stopAll() → endSession() → feedback sheet if ≥4 transcript turns → /home
 
-**Daily limit:** 2 sessions per user per IST day. On 429 from `/ai/start`: show dialog "Come back tomorrow" → /home.
+**Daily limit:** 5 sessions per user per IST day (`AI_DAILY_FREE_LIMIT`). On 429 from `/ai/start`: show dialog "Come back tomorrow" → /home.
 
 **MatchingScreen integration:**
 - 45s remaining: `_AiOfferCard` slide-up (dismiss available)
