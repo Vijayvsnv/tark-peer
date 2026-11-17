@@ -31,8 +31,12 @@ speakr-app/
 │   ├── routers/
 │   │   ├── auth.py           # POST /auth/verify
 │   │   ├── profile.py        # GET/PUT /profile
-│   │   ├── call.py           # POST /call/end
-│   │   └── match.py          # WebSocket /ws/match
+│   │   ├── call.py           # POST /call/end, /call/direct, /call/rate
+│   │   ├── match.py          # WebSocket /ws/match
+│   │   ├── room.py           # Group voice rooms (/room/*)
+│   │   ├── notify.py         # FCM push triggers (/notify/*)
+│   │   ├── moderation.py     # POST /report
+│   │   └── ai_partner.py     # Shivani AI partner (/ai/*)
 │   ├── services/
 │   │   ├── supabase_client.py
 │   │   ├── redis_client.py
