@@ -197,7 +197,7 @@ WS_URL=ws://10.0.2.2:8000/ws/match
 ## Features
 
 - Random voice matching (WebSocket + Redis queue)
-- 180 second call timer (auto end)
+- 30 minute call timer (1800s, auto end)
 - Friend requests during/after calls
 - Notification bell for pending requests
 - Call history (last 10 calls)
