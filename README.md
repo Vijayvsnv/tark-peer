@@ -197,12 +197,12 @@ WS_URL=ws://10.0.2.2:8000/ws/match
 ## Features
 
 - Random voice matching (WebSocket + Redis queue)
-- 180 second call timer (auto end)
+- 30 minute call timer (auto end, 1800s — synced between backend and app)
 - Friend requests during/after calls
 - Notification bell for pending requests
 - Call history (last 10 calls)
 - Online users count (real-time)
-- Dark purple theme
+- Steel blue + orange brand theme (see `flutter_app/lib/core/theme.dart`)
 - Stateless backend (scale horizontally)
 
 ---
